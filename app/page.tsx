@@ -1,38 +1,65 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PlusCircle } from "lucide-react"
-import { Dialog, DialogTrigger } from "@/components/ui/dialog"
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
-// 模擬專案數據
-const mockProjects = [
-  { id: 1, name: "台北市公寓專案", rooms: 5, lastUpdated: "2025-03-20" },
-  { id: 2, name: "新北市別墅專案", rooms: 8, lastUpdated: "2025-03-15" },
-  { id: 3, name: "桃園市辦公室專案", rooms: 12, lastUpdated: "2025-03-10" },
-]
+import { Database } from '@/types/supabase';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PlusCircle } from 'lucide-react';
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+// 引入Supabase相關函數
+import { adminGetProjects, adminAddProject, adminDeleteProject } from '@/utils/db-server';
 
 export default function Dashboard() {
-  const [projects, setProjects] = useState(mockProjects)
-  const [newProjectName, setNewProjectName] = useState("")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [projects, setProjects] = useState<Database['public']['Tables']['projects']['Row'][]>([]);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleCreateProject = () => {
-    if (!newProjectName.trim()) return
+  // 獲取項目資料
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setIsLoading(true);
+        const projectsData = await adminGetProjects();
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Failed to fetch projects:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    const newProject = {
-      id: projects.length + 1,
-      name: newProjectName,
-      rooms: 0,
-      lastUpdated: new Date().toISOString().split("T")[0],
+    fetchProjects();
+  }, []);
+
+  // 建立新項目
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+
+    try {
+      const newProject = await adminAddProject({
+        name: newProjectName,
+      });
+
+      setProjects([newProject, ...projects]);
+      setNewProjectName('');
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to create project:', error);
     }
-
-    setProjects([...projects, newProject])
-    setNewProjectName("")
-    setIsDialogOpen(false)
-  }
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -43,7 +70,10 @@ export default function Dashboard() {
         </div>
         <div className="flex-1 overflow-auto py-4 px-3">
           <div className="space-y-1">
-            <Link href="/" className="flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-100">
+            <Link
+              href="/"
+              className="flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-100"
+            >
               專案管理
             </Link>
           </div>
@@ -63,26 +93,26 @@ export default function Dashboard() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
-              <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <CardTitle>{project.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground mb-4">最後更新: {project.lastUpdated}</div>
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm">
-                        <span className="font-medium">{project.rooms}</span> 個房間
-                      </div>
-                      <Button variant="ghost" size="sm" className="gap-1">
-                        查看詳情
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+            {isLoading ? (
+              <p>載入中...</p>
+            ) : (
+              <>
+                {projects.map((project) => (
+                  <Link key={project.id} href={`/projects/${project.id}`}>
+                    <Card className="h-full hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-2">
+                        <CardTitle>{project.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm text-muted-foreground mb-4">
+                          最後更新: {new Date(project.updated_at).toLocaleDateString()}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </>
+            )}
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -91,11 +121,32 @@ export default function Dashboard() {
                   <p className="text-muted-foreground font-medium">新增專案</p>
                 </Card>
               </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>新增專案</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  <Label htmlFor="project-name">專案名稱</Label>
+                  <Input
+                    id="project-name"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="輸入專案名稱"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setIsDialogOpen(false)} variant="outline">
+                    取消
+                  </Button>
+                  <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>
+                    建立
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
           </div>
         </main>
       </div>
     </div>
-  )
+  );
 }
-
