@@ -1,0 +1,168 @@
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
+import supabaseAdmin from './supabase-server';
+
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  throw new Error('GEMINI_API_KEY is not set');
+}
+const genAI = new GoogleGenerativeAI(apiKey);
+const fileManager = new GoogleAIFileManager(apiKey);
+
+// Define interfaces for type safety
+interface GeminiFile {
+  name: string;
+  displayName?: string;
+  mimeType: string;
+  uri: string;
+  state: 'PROCESSING' | 'ACTIVE' | 'ERROR' | string;
+}
+
+interface FurnitureItem {
+  type: string;
+  count: number;
+}
+
+interface FurnitureResponse {
+  furnitures: FurnitureItem[];
+}
+
+/**
+ * Uploads the given file to Gemini from a URL.
+ *
+ * See https://ai.google.dev/gemini-api/docs/prompting_with_media
+ */
+async function uploadToGeminiFromUrl(
+  url: string,
+  mimeType: string,
+  displayName?: string,
+): Promise<GeminiFile> {
+  // 從 URL 獲取檔案內容
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch file from URL: ${url}, status: ${response.status}`);
+  }
+
+  // 將內容轉換為 Buffer
+  const fileBuffer = await response.arrayBuffer().then((buffer) => Buffer.from(buffer));
+
+  const uploadResult = await fileManager.uploadFile(fileBuffer, {
+    mimeType,
+    displayName: displayName || url,
+  });
+  const file = uploadResult.file;
+
+  return file;
+}
+
+/**
+ * Waits for the given files to be active.
+ *
+ * Some files uploaded to the Gemini API need to be processed before they can
+ * be used as prompt inputs. The status can be seen by querying the file's
+ * "state" field.
+ *
+ * This implementation uses a simple blocking polling loop. Production code
+ * should probably employ a more sophisticated approach.
+ */
+async function waitForFilesActive(files: GeminiFile[]): Promise<void> {
+  console.log('Waiting for file processing...');
+  for (const name of files.map((file: GeminiFile) => file.name)) {
+    let file = await fileManager.getFile(name);
+    while (file.state === 'PROCESSING') {
+      process.stdout.write('.');
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      file = await fileManager.getFile(name);
+    }
+    if (file.state !== 'ACTIVE') {
+      throw Error(`File ${file.name} failed to process`);
+    }
+  }
+  console.log('...all files ready\n');
+}
+
+const model = genAI.getGenerativeModel({
+  model: 'gemini-2.0-pro-exp-02-05',
+});
+
+// Fix the schema definition to use the correct type format
+const generationConfig = {
+  temperature: 1,
+  topP: 0.95,
+  topK: 64,
+  maxOutputTokens: 8192,
+};
+
+export const ParseFurniture = async ({
+  fileUrl,
+  fileName,
+  roomId,
+}: {
+  fileUrl: string;
+  fileName: string;
+  roomId: number;
+}) => {
+  try {
+    // 使用URL上傳檔案
+    const files = [await uploadToGeminiFromUrl(fileUrl, 'application/pdf', fileName)];
+
+    // Some files have a processing delay. Wait for them to be ready.
+    await waitForFilesActive(files);
+
+    const chatSession = model.startChat({
+      generationConfig,
+    });
+
+    // Add the prompt and file to the chat session
+    const result = await chatSession.sendMessage([
+      {
+        fileData: {
+          mimeType: files[0].mimeType,
+          fileUri: files[0].uri,
+        },
+      },
+      {
+        text: '這是一個房間的平面設計圖\n當中的 CT-11 CT-12等都是家具\n統計有幾種家具 及他們的數量給我\n\n注意需要列出所有的家具種類跟他們的數量\n\n請用JSON格式回應，格式為 {"furnitures": [{"type": "家具名稱", "count": 數量}, ...]}',
+      },
+    ]);
+
+    const responseText = result.response.text();
+    console.log('Gemini response:', responseText);
+
+    // Extract the JSON part from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    const jsonResponse = JSON.parse(jsonMatch[0]) as FurnitureResponse;
+    console.log('Parsed furniture:', jsonResponse);
+
+    if (!jsonResponse.furnitures || !Array.isArray(jsonResponse.furnitures)) {
+      throw new Error('Invalid furniture data structure');
+    }
+
+    // Add IDs to furniture items
+    const furnitureWithIds = jsonResponse.furnitures.map((item, index) => ({
+      ...item,
+      id: index + 1,
+    }));
+
+    // Update the room with the furniture data
+    const { data, error } = await supabaseAdmin
+      .from('rooms')
+      .update({ furnitures: furnitureWithIds })
+      .eq('id', roomId)
+      .select();
+
+    if (error) {
+      console.error('Error updating room with furniture data:', error);
+      throw error;
+    }
+
+    return data[0];
+  } catch (error) {
+    console.error('Error in ParseFurniture:', error);
+    throw error;
+  }
+};

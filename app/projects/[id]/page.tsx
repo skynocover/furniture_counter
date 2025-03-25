@@ -1,105 +1,111 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { PlusCircle, FileText, Upload, Save, Pencil, Check, X } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { useState } from 'react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { PlusCircle, FileText, Upload, Save, Pencil, Check, X } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // 模擬專案數據
 const mockProject = {
   id: 1,
-  name: "台北市公寓專案",
+  name: '台北市公寓專案',
   rooms: [
     {
       id: 1,
-      name: "客廳",
-      pdfUrl: "/placeholder.svg?height=800&width=600",
+      name: '客廳',
+      pdfUrl: '/placeholder.svg?height=800&width=600',
       furniture: [
-        { id: 1, type: "沙發", count: 2 },
-        { id: 2, type: "茶几", count: 1 },
-        { id: 3, type: "電視櫃", count: 1 },
-        { id: 4, type: "書架", count: 2 },
+        { id: 1, type: '沙發', count: 2 },
+        { id: 2, type: '茶几', count: 1 },
+        { id: 3, type: '電視櫃', count: 1 },
+        { id: 4, type: '書架', count: 2 },
       ],
     },
     {
       id: 2,
-      name: "主臥室",
-      pdfUrl: "/placeholder.svg?height=800&width=600",
+      name: '主臥室',
+      pdfUrl: '/placeholder.svg?height=800&width=600',
       furniture: [
-        { id: 1, type: "床", count: 1 },
-        { id: 2, type: "衣櫃", count: 2 },
-        { id: 3, type: "梳妝台", count: 1 },
-        { id: 4, type: "床頭櫃", count: 2 },
+        { id: 1, type: '床', count: 1 },
+        { id: 2, type: '衣櫃', count: 2 },
+        { id: 3, type: '梳妝台', count: 1 },
+        { id: 4, type: '床頭櫃', count: 2 },
       ],
     },
     {
       id: 3,
-      name: "次臥室",
-      pdfUrl: "/placeholder.svg?height=800&width=600",
+      name: '次臥室',
+      pdfUrl: '/placeholder.svg?height=800&width=600',
       furniture: [
-        { id: 1, type: "床", count: 1 },
-        { id: 2, type: "書桌", count: 1 },
-        { id: 3, type: "衣櫃", count: 1 },
+        { id: 1, type: '床', count: 1 },
+        { id: 2, type: '書桌', count: 1 },
+        { id: 3, type: '衣櫃', count: 1 },
       ],
     },
   ],
-}
+};
 
 export default function ProjectPage({ params }: { params: { id: string } }) {
-  const [project, setProject] = useState(mockProject)
-  const [activeTab, setActiveTab] = useState("overview")
-  const [newRoomName, setNewRoomName] = useState("")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingRoom, setEditingRoom] = useState<number | null>(null)
-  const [editingFurniture, setEditingFurniture] = useState<{ roomId: number; furnitureId: number } | null>(null)
-  const [editValue, setEditValue] = useState("")
+  const [project, setProject] = useState(mockProject);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [newRoomName, setNewRoomName] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<number | null>(null);
+  const [editingFurniture, setEditingFurniture] = useState<{
+    roomId: number;
+    furnitureId: number;
+  } | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   // 計算所有家具的總數
-  const furnitureTotals = project.rooms.reduce(
-    (acc, room) => {
-      room.furniture.forEach((item) => {
-        if (!acc[item.type]) {
-          acc[item.type] = 0
-        }
-        acc[item.type] += item.count
-      })
-      return acc
-    },
-    {} as Record<string, number>,
-  )
+  const furnitureTotals = project.rooms.reduce((acc, room) => {
+    room.furniture.forEach((item) => {
+      if (!acc[item.type]) {
+        acc[item.type] = 0;
+      }
+      acc[item.type] += item.count;
+    });
+    return acc;
+  }, {} as Record<string, number>);
 
   const handleAddRoom = () => {
-    if (!newRoomName.trim()) return
+    if (!newRoomName.trim()) return;
 
     const newRoom = {
       id: Math.max(0, ...project.rooms.map((r) => r.id)) + 1,
       name: newRoomName,
-      pdfUrl: "/placeholder.svg?height=800&width=600",
+      pdfUrl: '/placeholder.svg?height=800&width=600',
       furniture: [],
-    }
+    };
 
     setProject({
       ...project,
       rooms: [...project.rooms, newRoom],
-    })
+    });
 
-    setNewRoomName("")
-    setIsDialogOpen(false)
-  }
+    setNewRoomName('');
+    setIsDialogOpen(false);
+  };
 
   const handleEditRoomName = (roomId: number, newName: string) => {
     setProject({
       ...project,
       rooms: project.rooms.map((room) => (room.id === roomId ? { ...room, name: newName } : room)),
-    })
-    setEditingRoom(null)
-  }
+    });
+    setEditingRoom(null);
+  };
 
   const handleEditFurnitureCount = (roomId: number, furnitureId: number, newCount: number) => {
     setProject({
@@ -108,18 +114,20 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         room.id === roomId
           ? {
               ...room,
-              furniture: room.furniture.map((item) => (item.id === furnitureId ? { ...item, count: newCount } : item)),
+              furniture: room.furniture.map((item) =>
+                item.id === furnitureId ? { ...item, count: newCount } : item,
+              ),
             }
           : room,
       ),
-    })
-    setEditingFurniture(null)
-  }
+    });
+    setEditingFurniture(null);
+  };
 
   const startEditingFurniture = (roomId: number, furnitureId: number, currentCount: number) => {
-    setEditingFurniture({ roomId, furnitureId })
-    setEditValue(currentCount.toString())
-  }
+    setEditingFurniture({ roomId, furnitureId });
+    setEditValue(currentCount.toString());
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -189,7 +197,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       <Label htmlFor="room-pdf">上傳PDF文件</Label>
                       <Input id="room-pdf" type="file" accept=".pdf" />
                     </div>
-                    <Button className="w-full" onClick={handleAddRoom} disabled={!newRoomName.trim()}>
+                    <Button
+                      className="w-full"
+                      onClick={handleAddRoom}
+                      disabled={!newRoomName.trim()}
+                    >
                       新增房間
                     </Button>
                   </div>
@@ -234,7 +246,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            setActiveTab(`room-${room.id}`)
+                            setActiveTab(`room-${room.id}`);
                           }}
                         >
                           查看
@@ -270,7 +282,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                             onChange={(e) => setEditValue(e.target.value)}
                             className="max-w-[200px]"
                           />
-                          <Button variant="ghost" size="icon" onClick={() => handleEditRoomName(room.id, editValue)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditRoomName(room.id, editValue)}
+                          >
                             <Check className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => setEditingRoom(null)}>
@@ -284,8 +300,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              setEditingRoom(room.id)
-                              setEditValue(room.name)
+                              setEditingRoom(room.id);
+                              setEditValue(room.name);
                             }}
                           >
                             <Pencil className="h-4 w-4" />
@@ -316,7 +332,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </CardHeader>
                     <CardContent>
                       <div className="border rounded-lg overflow-hidden">
-                        <iframe src={room.pdfUrl} className="w-full h-[500px]" title={`${room.name} PDF`} />
+                        <iframe
+                          src={room.pdfUrl}
+                          className="w-full h-[500px]"
+                          title={`${room.name} PDF`}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -355,12 +375,20 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                         variant="ghost"
                                         size="icon"
                                         onClick={() =>
-                                          handleEditFurnitureCount(room.id, item.id, Number.parseInt(editValue) || 0)
+                                          handleEditFurnitureCount(
+                                            room.id,
+                                            item.id,
+                                            Number.parseInt(editValue) || 0,
+                                          )
                                         }
                                       >
                                         <Check className="h-4 w-4" />
                                       </Button>
-                                      <Button variant="ghost" size="icon" onClick={() => setEditingFurniture(null)}>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setEditingFurniture(null)}
+                                      >
                                         <X className="h-4 w-4" />
                                       </Button>
                                     </div>
@@ -377,7 +405,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => startEditingFurniture(room.id, item.id, item.count)}
+                                      onClick={() =>
+                                        startEditingFurniture(room.id, item.id, item.count)
+                                      }
                                     >
                                       編輯
                                     </Button>
@@ -408,7 +438,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">家具種類</div>
-                      <div className="text-2xl font-bold">{Object.keys(furnitureTotals).length} 種</div>
+                      <div className="text-2xl font-bold">
+                        {Object.keys(furnitureTotals).length} 種
+                      </div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">房間數量</div>
@@ -419,7 +451,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   <div className="h-[400px] w-full mb-6">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={Object.entries(furnitureTotals).map(([type, count]) => ({ type, count }))}
+                        data={Object.entries(furnitureTotals).map(([type, count]) => ({
+                          type,
+                          count,
+                        }))}
                         margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
@@ -444,15 +479,18 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                         {Object.entries(furnitureTotals)
                           .sort((a, b) => b[1] - a[1])
                           .map(([type, count], index) => {
-                            const total = Object.values(furnitureTotals).reduce((sum, count) => sum + count, 0)
-                            const percentage = ((count / total) * 100).toFixed(1)
+                            const total = Object.values(furnitureTotals).reduce(
+                              (sum, count) => sum + count,
+                              0,
+                            );
+                            const percentage = ((count / total) * 100).toFixed(1);
                             return (
                               <tr key={index} className="border-b last:border-0">
                                 <td className="p-3">{type}</td>
                                 <td className="text-center p-3">{count} 件</td>
                                 <td className="text-right p-3">{percentage}%</td>
                               </tr>
-                            )
+                            );
                           })}
                       </tbody>
                     </table>
@@ -464,6 +502,5 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         </main>
       </div>
     </div>
-  )
+  );
 }
-
