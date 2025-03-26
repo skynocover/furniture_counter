@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
+import { PlusCircle, FileText, Upload, Save, Pencil, Check, X } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,51 +17,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { PlusCircle, FileText, Upload, Save, Pencil, Check, X } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  adminGetProjectById,
+  adminGetRooms,
+  adminAddRoom,
+  adminUpdateRoom,
+} from '@/utils/db-server';
+import { uploadFileToSupabase } from '@/utils/upload-helper';
 
-// 模擬專案數據
-const mockProject = {
-  id: 1,
-  name: '台北市公寓專案',
-  rooms: [
-    {
-      id: 1,
-      name: '客廳',
-      pdfUrl: '/placeholder.svg?height=800&width=600',
-      furniture: [
-        { id: 1, type: '沙發', count: 2 },
-        { id: 2, type: '茶几', count: 1 },
-        { id: 3, type: '電視櫃', count: 1 },
-        { id: 4, type: '書架', count: 2 },
-      ],
-    },
-    {
-      id: 2,
-      name: '主臥室',
-      pdfUrl: '/placeholder.svg?height=800&width=600',
-      furniture: [
-        { id: 1, type: '床', count: 1 },
-        { id: 2, type: '衣櫃', count: 2 },
-        { id: 3, type: '梳妝台', count: 1 },
-        { id: 4, type: '床頭櫃', count: 2 },
-      ],
-    },
-    {
-      id: 3,
-      name: '次臥室',
-      pdfUrl: '/placeholder.svg?height=800&width=600',
-      furniture: [
-        { id: 1, type: '床', count: 1 },
-        { id: 2, type: '書桌', count: 1 },
-        { id: 3, type: '衣櫃', count: 1 },
-      ],
-    },
-  ],
-};
-
-export default function ProjectPage({ params }: { params: { id: string } }) {
-  const [project, setProject] = useState(mockProject);
+export default function ProjectPage({ params }: any) {
+  const unwrappedParams = use<{ id: string }>(params);
+  const { id } = unwrappedParams;
+  const [project, setProject] = useState<any>(null);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [newRoomName, setNewRoomName] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,66 +40,126 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     furnitureId: number;
   } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+
+  // 初始化數據
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const projectData = await adminGetProjectById(Number(id));
+        const roomsData = await adminGetRooms(Number(id));
+
+        setProject(projectData);
+        setRooms(roomsData);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [id]);
 
   // 計算所有家具的總數
-  const furnitureTotals = project.rooms.reduce((acc, room) => {
-    room.furniture.forEach((item) => {
-      if (!acc[item.type]) {
-        acc[item.type] = 0;
-      }
-      acc[item.type] += item.count;
-    });
+  const furnitureTotals: any = rooms.reduce((acc, room) => {
+    if (room.furniture) {
+      room.furniture.forEach((item: any) => {
+        if (!acc[item.type]) {
+          acc[item.type] = 0;
+        }
+        acc[item.type] += item.count;
+      });
+    }
     return acc;
   }, {} as Record<string, number>);
 
-  const handleAddRoom = () => {
+  const handleAddRoom = async () => {
     if (!newRoomName.trim()) return;
 
-    const newRoom = {
-      id: Math.max(0, ...project.rooms.map((r) => r.id)) + 1,
-      name: newRoomName,
-      pdfUrl: '/placeholder.svg?height=800&width=600',
-      furniture: [],
-    };
+    try {
+      let pdfUrl = null;
 
-    setProject({
-      ...project,
-      rooms: [...project.rooms, newRoom],
-    });
+      if (pdfFile) {
+        // 上傳文件到 Supabase 存儲
+        pdfUrl = await uploadFileToSupabase(pdfFile, `projects/${id}/rooms`);
+      }
 
-    setNewRoomName('');
-    setIsDialogOpen(false);
+      const newRoom = await adminAddRoom({
+        project_id: Number(id),
+        name: newRoomName,
+        pdf_url: pdfUrl || '',
+        furnitures: [],
+      });
+
+      setRooms([...rooms, newRoom]);
+      setNewRoomName('');
+      setIsDialogOpen(false);
+      setPdfFile(null);
+    } catch (error) {
+      console.error('Failed to add room:', error);
+    }
   };
 
-  const handleEditRoomName = (roomId: number, newName: string) => {
-    setProject({
-      ...project,
-      rooms: project.rooms.map((room) => (room.id === roomId ? { ...room, name: newName } : room)),
-    });
-    setEditingRoom(null);
+  const handleEditRoomName = async (roomId: number, newName: string) => {
+    try {
+      await adminUpdateRoom(roomId, { name: newName });
+
+      setRooms(rooms.map((room) => (room.id === roomId ? { ...room, name: newName } : room)));
+
+      setEditingRoom(null);
+    } catch (error) {
+      console.error('Failed to update room name:', error);
+    }
   };
 
-  const handleEditFurnitureCount = (roomId: number, furnitureId: number, newCount: number) => {
-    setProject({
-      ...project,
-      rooms: project.rooms.map((room) =>
-        room.id === roomId
-          ? {
-              ...room,
-              furniture: room.furniture.map((item) =>
-                item.id === furnitureId ? { ...item, count: newCount } : item,
-              ),
-            }
-          : room,
-      ),
-    });
-    setEditingFurniture(null);
+  const handleEditFurnitureCount = async (
+    roomId: number,
+    furnitureId: number,
+    newCount: number,
+  ) => {
+    try {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) return;
+
+      const updatedFurniture = room.furnitures.map((item: any) =>
+        item.id === furnitureId ? { ...item, count: newCount } : item,
+      );
+
+      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+
+      setEditingFurniture(null);
+    } catch (error) {
+      console.error('Failed to update furniture count:', error);
+    }
+  };
+
+  const handleUploadPdf = async (roomId: number, file: File) => {
+    try {
+      const pdfUrl = await uploadFileToSupabase(file, `projects/${id}/rooms`);
+      await adminUpdateRoom(roomId, { pdf_url: pdfUrl });
+
+      setRooms(rooms.map((room) => (room.id === roomId ? { ...room, pdf_url: pdfUrl } : room)));
+    } catch (error) {
+      console.error('Failed to upload PDF:', error);
+    }
   };
 
   const startEditingFurniture = (roomId: number, furnitureId: number, currentCount: number) => {
     setEditingFurniture({ roomId, furnitureId });
     setEditValue(currentCount.toString());
   };
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center">載入中...</div>;
+  }
+
+  if (!project) {
+    return <div className="flex min-h-screen items-center justify-center">找不到專案</div>;
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -165,7 +197,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
                 <TabsTrigger value="analysis">分析結果</TabsTrigger>
-                {project.rooms.map((room) => (
+                {rooms.map((room) => (
                   <TabsTrigger key={room.id} value={`room-${room.id}`}>
                     {room.name}
                   </TabsTrigger>
@@ -195,7 +227,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="room-pdf">上傳PDF文件</Label>
-                      <Input id="room-pdf" type="file" accept=".pdf" />
+                      <Input
+                        id="room-pdf"
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setPdfFile(e.target.files[0]);
+                          }
+                        }}
+                      />
                     </div>
                     <Button
                       className="w-full"
@@ -227,7 +268,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                         {Object.entries(furnitureTotals).map(([type, count], index) => (
                           <tr key={index} className="border-b last:border-0">
                             <td className="p-3">{type}</td>
-                            <td className="text-center p-3">{count} 件</td>
+                            {/* <td className="text-center p-3">{count} 件</td> */}
                           </tr>
                         ))}
                       </tbody>
@@ -237,7 +278,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               </Card>
 
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {project.rooms.map((room) => (
+                {rooms.map((room) => (
                   <Card key={room.id} className="h-full">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex justify-between items-center">
@@ -255,10 +296,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </CardHeader>
                     <CardContent>
                       <div className="text-sm text-muted-foreground mb-2">
-                        家具數量: {room.furniture.reduce((sum, item) => sum + item.count, 0)} 件
+                        家具數量:{' '}
+                        {room.furnitures.reduce((sum: number, item: any) => sum + item.count, 0)}件
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {room.furniture.map((item) => (
+                        {room.furnitures.map((item: any) => (
                           <div key={item.id} className="text-xs bg-muted px-2 py-1 rounded-full">
                             {item.type}: {item.count}
                           </div>
@@ -270,7 +312,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               </div>
             </TabsContent>
 
-            {project.rooms.map((room) => (
+            {rooms.map((room) => (
               <TabsContent key={room.id} value={`room-${room.id}`} className="space-y-6">
                 <Card>
                   <CardHeader className="pb-2">
@@ -309,10 +351,22 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                         </div>
                       )}
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="gap-1">
-                          <Upload className="h-4 w-4" />
-                          更新PDF
-                        </Button>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadPdf(room.id, e.target.files[0]);
+                              }
+                            }}
+                          />
+                          <Button variant="outline" size="sm" className="gap-1">
+                            <Upload className="h-4 w-4" />
+                            更新PDF
+                          </Button>
+                        </label>
                         <Button variant="outline" size="sm" className="gap-1">
                           <Save className="h-4 w-4" />
                           儲存變更
@@ -333,7 +387,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     <CardContent>
                       <div className="border rounded-lg overflow-hidden">
                         <iframe
-                          src={room.pdfUrl}
+                          src={room.pdf_url || '/placeholder.svg?height=800&width=600'}
                           className="w-full h-[500px]"
                           title={`${room.name} PDF`}
                         />
@@ -356,7 +410,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {room.furniture.map((item) => (
+                            {room.furnitures.map((item: any) => (
                               <tr key={item.id} className="border-b last:border-0">
                                 <td className="p-3">{item.type}</td>
                                 <td className="text-center p-3">
@@ -433,7 +487,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">總家具數量</div>
                       <div className="text-2xl font-bold">
-                        {Object.values(furnitureTotals).reduce((sum, count) => sum + count, 0)} 件
+                        {/* {Object.values(furnitureTotals).reduce(
+                          (sum: number, count: number) => sum + count,
+                          0,
+                        )} */}
+                        件
                       </div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
@@ -444,7 +502,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">房間數量</div>
-                      <div className="text-2xl font-bold">{project.rooms.length} 間</div>
+                      <div className="text-2xl font-bold">{rooms.length} 間</div>
                     </div>
                   </div>
 
@@ -476,7 +534,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries(furnitureTotals)
+                        {/* {Object.entries(furnitureTotals)
                           .sort((a, b) => b[1] - a[1])
                           .map(([type, count], index) => {
                             const total = Object.values(furnitureTotals).reduce(
@@ -491,7 +549,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 <td className="text-right p-3">{percentage}%</td>
                               </tr>
                             );
-                          })}
+                          })} */}
                       </tbody>
                     </table>
                   </div>

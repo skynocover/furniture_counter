@@ -1,4 +1,5 @@
 'use server';
+
 import supabaseAdmin from './supabase-server';
 import { Database } from '../types/supabase';
 
@@ -138,4 +139,20 @@ export const adminDeleteRoom = async (id: number) => {
   }
 
   return true;
+};
+
+// 添加家具相關操作
+export const adminUpdateFurniture = async (roomId: number, furnitures: any[]) => {
+  const { data, error } = await supabaseAdmin
+    .from('rooms')
+    .update({ furnitures })
+    .eq('id', roomId)
+    .select();
+
+  if (error) {
+    console.error('Error updating furniture:', error);
+    throw error;
+  }
+
+  return data[0] as Database['public']['Tables']['rooms']['Row'];
 };

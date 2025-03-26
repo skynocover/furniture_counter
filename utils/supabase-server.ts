@@ -7,7 +7,7 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
 }
 
 if (!process.env.NEXT_SUPABASE_SERVICE_KEY) {
-  throw new Error('Missing environment variable: SUPABASE_SERVICE_KEY');
+  throw new Error('Missing environment variable: NEXT_SUPABASE_SERVICE_KEY');
 }
 
 // Create a Supabase client with the service role key for server-side operations
