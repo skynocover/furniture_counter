@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { PlusCircle, FileText, Upload, Save, Pencil, Check, X } from 'lucide-react';
+import { PlusCircle, FileText, Upload, Save, Pencil, Check, X, Trash } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,10 @@ import {
   adminGetRooms,
   adminAddRoom,
   adminUpdateRoom,
+  adminDeleteRoom,
 } from '@/utils/db-server';
 import { uploadFileToSupabase } from '@/utils/upload-helper';
+import { ParseFurniture } from '@/utils/gemini';
 
 export default function ProjectPage({ params }: any) {
   const unwrappedParams = use<{ id: string }>(params);
@@ -40,7 +42,14 @@ export default function ProjectPage({ params }: any) {
     furnitureId: number;
   } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editTypeValue, setEditTypeValue] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [addingRoom, setAddingRoom] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [editingFurnitureType, setEditingFurnitureType] = useState<{
+    roomId: number;
+    furnitureId: number;
+  } | null>(null);
 
   // 初始化數據
   useEffect(() => {
@@ -76,21 +85,40 @@ export default function ProjectPage({ params }: any) {
   }, {} as Record<string, number>);
 
   const handleAddRoom = async () => {
-    if (!newRoomName.trim()) return;
-
     try {
-      let pdfUrl = null;
+      setAddingRoom(true);
+      let pdfUrl = '';
+      let roomName = newRoomName.trim();
 
       if (pdfFile) {
         // 上傳文件到 Supabase 存儲
         pdfUrl = await uploadFileToSupabase(pdfFile, `projects/${id}/rooms`);
+
+        // 如果房間名稱為空，則使用PDF檔案名稱
+        if (!roomName) {
+          // 移除副檔名
+          roomName = pdfFile.name.replace(/\.[^/.]+$/, '');
+        }
       }
+
+      // 檢查名稱是否還是為空，若為空則中斷
+      if (!roomName) {
+        alert('請輸入房間名稱或上傳檔案');
+        setAddingRoom(false);
+        return;
+      }
+
+      const furniture: any = await ParseFurniture({
+        fileUrl: pdfUrl,
+        fileName: pdfFile?.name || '',
+        roomId: Number(id),
+      });
 
       const newRoom = await adminAddRoom({
         project_id: Number(id),
-        name: newRoomName,
+        name: roomName,
         pdf_url: pdfUrl || '',
-        furnitures: [],
+        furnitures: furniture,
       });
 
       setRooms([...rooms, newRoom]);
@@ -99,6 +127,8 @@ export default function ProjectPage({ params }: any) {
       setPdfFile(null);
     } catch (error) {
       console.error('Failed to add room:', error);
+    } finally {
+      setAddingRoom(false);
     }
   };
 
@@ -114,17 +144,18 @@ export default function ProjectPage({ params }: any) {
     }
   };
 
-  const handleEditFurnitureCount = async (
+  const handleEditFurniture = async (
     roomId: number,
     furnitureId: number,
     newCount: number,
+    newType: string,
   ) => {
     try {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return;
 
-      const updatedFurniture = room.furnitures.map((item: any) =>
-        item.id === furnitureId ? { ...item, count: newCount } : item,
+      const updatedFurniture = room.furnitures.map((item: any, index: number) =>
+        index === furnitureId ? { ...item, count: newCount, type: newType } : item,
       );
 
       await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
@@ -133,7 +164,7 @@ export default function ProjectPage({ params }: any) {
 
       setEditingFurniture(null);
     } catch (error) {
-      console.error('Failed to update furniture count:', error);
+      console.error('Failed to update furniture:', error);
     }
   };
 
@@ -148,9 +179,73 @@ export default function ProjectPage({ params }: any) {
     }
   };
 
-  const startEditingFurniture = (roomId: number, furnitureId: number, currentCount: number) => {
+  const handleDeleteRoom = async (roomId: number) => {
+    try {
+      await adminDeleteRoom(roomId);
+
+      // 更新本地狀態，移除已刪除的房間
+      setRooms(rooms.filter((room) => room.id !== roomId));
+
+      // 如果當前在被刪除的房間標籤頁，則切換到總覽標籤
+      if (activeTab === `room-${roomId}`) {
+        setActiveTab('overview');
+      }
+
+      // 重置確認刪除狀態
+      setConfirmDelete(null);
+    } catch (error) {
+      console.error('Failed to delete room:', error);
+    }
+  };
+
+  const handleAddFurniture = async (roomId: number) => {
+    try {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) return;
+
+      // 創建新的家具項目
+      const newFurniture = {
+        id: Date.now(), // 臨時ID，實際上後端可能會重新分配
+        type: '新家具',
+        count: 1,
+      };
+
+      const updatedFurniture = [...room.furnitures, newFurniture];
+
+      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+    } catch (error) {
+      console.error('Failed to add furniture:', error);
+    }
+  };
+
+  const handleDeleteFurniture = async (roomId: number, furnitureId: number) => {
+    try {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) return;
+
+      const updatedFurniture = room.furnitures.filter(
+        (item: any, index: number) => index !== furnitureId,
+      );
+
+      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+    } catch (error) {
+      console.error('Failed to delete furniture:', error);
+    }
+  };
+
+  const startEditingFurniture = (
+    roomId: number,
+    furnitureId: number,
+    currentCount: number,
+    currentType: string,
+  ) => {
     setEditingFurniture({ roomId, furnitureId });
     setEditValue(currentCount.toString());
+    setEditTypeValue(currentType);
   };
 
   if (loading) {
@@ -163,25 +258,8 @@ export default function ProjectPage({ params }: any) {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* 側邊欄 */}
-      <div className="hidden md:flex w-64 flex-col fixed inset-y-0 border-r bg-white">
-        <div className="flex items-center h-16 px-4 border-b">
-          <h1 className="text-lg font-semibold">家具識別系統</h1>
-        </div>
-        <div className="flex-1 overflow-auto py-4 px-3">
-          <div className="space-y-1">
-            <Link
-              href="/"
-              className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-            >
-              專案管理
-            </Link>
-          </div>
-        </div>
-      </div>
-
       {/* 主內容區 */}
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1 ">
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-white px-6">
           <h1 className="text-lg font-semibold">{project.name}</h1>
           <div className="ml-auto flex items-center gap-4">
@@ -191,8 +269,8 @@ export default function ProjectPage({ params }: any) {
           </div>
         </header>
 
-        <main className="p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <main className="p-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-2">
             <div className="flex justify-between items-center">
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
@@ -241,9 +319,16 @@ export default function ProjectPage({ params }: any) {
                     <Button
                       className="w-full"
                       onClick={handleAddRoom}
-                      disabled={!newRoomName.trim()}
+                      disabled={(!newRoomName.trim() && !pdfFile) || addingRoom}
                     >
-                      新增房間
+                      {addingRoom ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                          處理中...
+                        </div>
+                      ) : (
+                        '新增房間'
+                      )}
                     </Button>
                   </div>
                 </DialogContent>
@@ -300,8 +385,8 @@ export default function ProjectPage({ params }: any) {
                         {room.furnitures.reduce((sum: number, item: any) => sum + item.count, 0)}件
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {room.furnitures.map((item: any) => (
-                          <div key={item.id} className="text-xs bg-muted px-2 py-1 rounded-full">
+                        {room.furnitures.map((item: any, index: number) => (
+                          <div key={index} className="text-xs bg-muted px-2 py-1 rounded-full">
                             {item.type}: {item.count}
                           </div>
                         ))}
@@ -362,22 +447,43 @@ export default function ProjectPage({ params }: any) {
                               }
                             }}
                           />
-                          <Button variant="outline" size="sm" className="gap-1">
-                            <Upload className="h-4 w-4" />
-                            更新PDF
-                          </Button>
                         </label>
-                        <Button variant="outline" size="sm" className="gap-1">
-                          <Save className="h-4 w-4" />
-                          儲存變更
-                        </Button>
+
+                        {confirmDelete === room.id ? (
+                          <>
+                            <Button
+                              onClick={() => handleDeleteRoom(room.id)}
+                              variant="destructive"
+                              size="sm"
+                            >
+                              確認
+                            </Button>
+                            <Button
+                              onClick={() => setConfirmDelete(null)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              取消
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            onClick={() => setConfirmDelete(room.id)}
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 text-red-500 hover:text-red-600"
+                          >
+                            <Trash className="h-4 w-4" />
+                            刪除
+                          </Button>
+                        )}
                       </div>
                     </CardTitle>
                   </CardHeader>
                 </Card>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                  <Card>
+                <div className="grid gap-6 md:grid-cols-3">
+                  <Card className="md:col-span-2">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <FileText className="h-5 w-5" />
@@ -388,7 +494,7 @@ export default function ProjectPage({ params }: any) {
                       <div className="border rounded-lg overflow-hidden">
                         <iframe
                           src={room.pdf_url || '/placeholder.svg?height=800&width=600'}
-                          className="w-full h-[500px]"
+                          className="w-full h-[800px]"
                           title={`${room.name} PDF`}
                         />
                       </div>
@@ -397,7 +503,18 @@ export default function ProjectPage({ params }: any) {
 
                   <Card>
                     <CardHeader>
-                      <CardTitle>家具清單</CardTitle>
+                      <CardTitle className="flex justify-between items-center">
+                        <span>家具清單</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddFurniture(room.id)}
+                          className="gap-1"
+                        >
+                          <PlusCircle className="h-4 w-4" />
+                          新增家具
+                        </Button>
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="border rounded-lg overflow-hidden">
@@ -410,13 +527,27 @@ export default function ProjectPage({ params }: any) {
                             </tr>
                           </thead>
                           <tbody>
-                            {room.furnitures.map((item: any) => (
-                              <tr key={item.id} className="border-b last:border-0">
-                                <td className="p-3">{item.type}</td>
+                            {room.furnitures.map((item: any, index: number) => (
+                              <tr key={index} className="border-b last:border-0">
+                                <td className="p-3">
+                                  {editingFurniture &&
+                                  editingFurniture.roomId === room.id &&
+                                  editingFurniture.furnitureId === index ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={editTypeValue}
+                                        onChange={(e) => setEditTypeValue(e.target.value)}
+                                        className="max-w-[150px]"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span>{item.type}</span>
+                                  )}
+                                </td>
                                 <td className="text-center p-3">
                                   {editingFurniture &&
                                   editingFurniture.roomId === room.id &&
-                                  editingFurniture.furnitureId === item.id ? (
+                                  editingFurniture.furnitureId === index ? (
                                     <div className="flex items-center justify-center gap-2">
                                       <Input
                                         type="number"
@@ -425,47 +556,66 @@ export default function ProjectPage({ params }: any) {
                                         className="max-w-[80px]"
                                         min="0"
                                       />
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() =>
-                                          handleEditFurnitureCount(
-                                            room.id,
-                                            item.id,
-                                            Number.parseInt(editValue) || 0,
-                                          )
-                                        }
-                                      >
-                                        <Check className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setEditingFurniture(null)}
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </Button>
                                     </div>
                                   ) : (
                                     <span>{item.count} 件</span>
                                   )}
                                 </td>
                                 <td className="text-right p-3">
-                                  {!(
-                                    editingFurniture &&
+                                  <div className="flex justify-end gap-1">
+                                    {editingFurniture &&
                                     editingFurniture.roomId === room.id &&
-                                    editingFurniture.furnitureId === item.id
-                                  ) && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        startEditingFurniture(room.id, item.id, item.count)
-                                      }
-                                    >
-                                      編輯
-                                    </Button>
-                                  )}
+                                    editingFurniture.furnitureId === index ? (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() =>
+                                            handleEditFurniture(
+                                              room.id,
+                                              index,
+                                              Number.parseInt(editValue) || 0,
+                                              editTypeValue,
+                                            )
+                                          }
+                                        >
+                                          <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => setEditingFurniture(null)}
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() =>
+                                            startEditingFurniture(
+                                              room.id,
+                                              index,
+                                              item.count,
+                                              item.type,
+                                            )
+                                          }
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="text-red-500 hover:text-red-600"
+                                          onClick={() => handleDeleteFurniture(room.id, index)}
+                                        >
+                                          <Trash className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}

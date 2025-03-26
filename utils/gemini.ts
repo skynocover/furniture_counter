@@ -1,3 +1,4 @@
+'use server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import supabaseAdmin from './supabase-server';
@@ -86,11 +87,33 @@ const model = genAI.getGenerativeModel({
 });
 
 // Fix the schema definition to use the correct type format
-const generationConfig = {
+const generationConfig: any = {
   temperature: 1,
   topP: 0.95,
   topK: 64,
   maxOutputTokens: 8192,
+  responseModalities: [],
+  responseMimeType: 'application/json',
+  responseSchema: {
+    type: 'object',
+    properties: {
+      furnitures: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+            },
+            count: {
+              type: 'integer',
+            },
+          },
+          required: ['type', 'count'],
+        },
+      },
+    },
+  },
 };
 
 export const ParseFurniture = async ({
@@ -122,12 +145,12 @@ export const ParseFurniture = async ({
         },
       },
       {
-        text: '這是一個房間的平面設計圖\n當中的 CT-11 CT-12等都是家具\n統計有幾種家具 及他們的數量給我\n\n注意需要列出所有的家具種類跟他們的數量\n\n請用JSON格式回應，格式為 {"furnitures": [{"type": "家具名稱", "count": 數量}, ...]}',
+        text: '這是一個房間的平面設計圖\n當中的 CT-11 CT-12等都是家具的編號\n統計有幾種家具 及他們的數量給我\n\n注意需要列出所有的家具編號跟他們的數量\n\n左上角的表格內容為備註 不需要統計\n\n使用JSON格式回應，格式為 {"furnitures": [{"type": "家具編號", "count": 數量}, ...]}',
       },
     ]);
 
     const responseText = result.response.text();
-    console.log('Gemini response:', responseText);
+    // console.log('Gemini response:', responseText);
 
     // Extract the JSON part from the response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -142,25 +165,27 @@ export const ParseFurniture = async ({
       throw new Error('Invalid furniture data structure');
     }
 
-    // Add IDs to furniture items
-    const furnitureWithIds = jsonResponse.furnitures.map((item, index) => ({
-      ...item,
-      id: index + 1,
-    }));
+    return jsonResponse.furnitures;
 
-    // Update the room with the furniture data
-    const { data, error } = await supabaseAdmin
-      .from('rooms')
-      .update({ furnitures: furnitureWithIds })
-      .eq('id', roomId)
-      .select();
+    // // Add IDs to furniture items
+    // const furnitureWithIds = jsonResponse.furnitures.map((item, index) => ({
+    //   ...item,
+    //   id: index + 1,
+    // }));
 
-    if (error) {
-      console.error('Error updating room with furniture data:', error);
-      throw error;
-    }
+    // // Update the room with the furniture data
+    // const { data, error } = await supabaseAdmin
+    //   .from('rooms')
+    //   .update({ furnitures: furnitureWithIds })
+    //   .eq('id', roomId)
+    //   .select();
 
-    return data[0];
+    // if (error) {
+    //   console.error('Error updating room with furniture data:', error);
+    //   throw error;
+    // }
+
+    // return data[0];
   } catch (error) {
     console.error('Error in ParseFurniture:', error);
     throw error;
