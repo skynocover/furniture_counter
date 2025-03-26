@@ -46,10 +46,6 @@ export default function ProjectPage({ params }: any) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [addingRoom, setAddingRoom] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
-  const [editingFurnitureType, setEditingFurnitureType] = useState<{
-    roomId: number;
-    furnitureId: number;
-  } | null>(null);
 
   // 初始化數據
   useEffect(() => {
@@ -210,7 +206,7 @@ export default function ProjectPage({ params }: any) {
         count: 1,
       };
 
-      const updatedFurniture = [...room.furnitures, newFurniture];
+      const updatedFurniture = [newFurniture, ...room.furnitures];
 
       await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
 
@@ -382,7 +378,7 @@ export default function ProjectPage({ params }: any) {
                     <CardContent>
                       <div className="text-sm text-muted-foreground mb-2">
                         家具數量:{' '}
-                        {room.furnitures.reduce((sum: number, item: any) => sum + item.count, 0)}件
+                        {room.furnitures.reduce((sum: number, item: any) => sum + item.count, 0)}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {room.furnitures.map((item: any, index: number) => (
@@ -398,111 +394,108 @@ export default function ProjectPage({ params }: any) {
             </TabsContent>
 
             {rooms.map((room) => (
-              <TabsContent key={room.id} value={`room-${room.id}`} className="space-y-6">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex justify-between items-center">
-                      {editingRoom === room.id ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="max-w-[200px]"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditRoomName(room.id, editValue)}
-                          >
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setEditingRoom(null)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span>{room.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setEditingRoom(room.id);
-                              setEditValue(room.name);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            accept=".pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                handleUploadPdf(room.id, e.target.files[0]);
-                              }
-                            }}
-                          />
-                        </label>
-
-                        {confirmDelete === room.id ? (
-                          <>
-                            <Button
-                              onClick={() => handleDeleteRoom(room.id)}
-                              variant="destructive"
-                              size="sm"
-                            >
-                              確認
-                            </Button>
-                            <Button
-                              onClick={() => setConfirmDelete(null)}
-                              variant="outline"
-                              size="sm"
-                            >
-                              取消
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            onClick={() => setConfirmDelete(room.id)}
-                            variant="outline"
-                            size="sm"
-                            className="gap-1 text-red-500 hover:text-red-600"
-                          >
-                            <Trash className="h-4 w-4" />
-                            刪除
-                          </Button>
-                        )}
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-
-                <div className="grid gap-6 md:grid-cols-3">
-                  <Card className="md:col-span-2">
-                    <CardHeader>
+              <TabsContent key={room.id} value={`room-${room.id}`} className="space-y-2">
+                <div className="grid gap-2 grid-cols-12">
+                  <Card className="col-span-9">
+                    <CardHeader className="p-3 pb-1">
                       <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
-                        房間PDF
+                        <div className="flex items-center justify-between w-full">
+                          {editingRoom === room.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                className="max-w-[200px]"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditRoomName(room.id, editValue)}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setEditingRoom(null)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span>{room.name}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setEditingRoom(room.id);
+                                  setEditValue(room.name);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    handleUploadPdf(room.id, e.target.files[0]);
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            {confirmDelete === room.id ? (
+                              <>
+                                <Button
+                                  onClick={() => handleDeleteRoom(room.id)}
+                                  variant="destructive"
+                                  size="sm"
+                                >
+                                  確認
+                                </Button>
+                                <Button
+                                  onClick={() => setConfirmDelete(null)}
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  取消
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                onClick={() => setConfirmDelete(room.id)}
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-red-500 hover:text-red-600"
+                              >
+                                <Trash className="h-4 w-4" />
+                                刪除
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-2">
                       <div className="border rounded-lg overflow-hidden">
                         <iframe
-                          src={room.pdf_url || '/placeholder.svg?height=800&width=600'}
-                          className="w-full h-[800px]"
+                          src={room.pdf_url}
+                          className="w-full h-[740px]"
                           title={`${room.name} PDF`}
                         />
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader>
+                  <Card className="col-span-3">
+                    <CardHeader className="p-3 pb-1">
                       <CardTitle className="flex justify-between items-center">
                         <span>家具清單</span>
                         <Button
@@ -516,111 +509,113 @@ export default function ProjectPage({ params }: any) {
                         </Button>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-3">
                       <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-muted border-b">
-                              <th className="text-left p-3">家具類型</th>
-                              <th className="text-center p-3">數量</th>
-                              <th className="text-right p-3">操作</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {room.furnitures.map((item: any, index: number) => (
-                              <tr key={index} className="border-b last:border-0">
-                                <td className="p-3">
-                                  {editingFurniture &&
-                                  editingFurniture.roomId === room.id &&
-                                  editingFurniture.furnitureId === index ? (
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        value={editTypeValue}
-                                        onChange={(e) => setEditTypeValue(e.target.value)}
-                                        className="max-w-[150px]"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span>{item.type}</span>
-                                  )}
-                                </td>
-                                <td className="text-center p-3">
-                                  {editingFurniture &&
-                                  editingFurniture.roomId === room.id &&
-                                  editingFurniture.furnitureId === index ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <Input
-                                        type="number"
-                                        value={editValue}
-                                        onChange={(e) => setEditValue(e.target.value)}
-                                        className="max-w-[80px]"
-                                        min="0"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span>{item.count} 件</span>
-                                  )}
-                                </td>
-                                <td className="text-right p-3">
-                                  <div className="flex justify-end gap-1">
+                        <div className="max-h-[740px] overflow-y-auto">
+                          <table className="w-full">
+                            <thead className="sticky top-0 bg-background z-10">
+                              <tr className="bg-muted border-b">
+                                <th className="text-left p-3">家具類型</th>
+                                <th className="text-center p-3">數量</th>
+                                <th className="text-right p-3">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {room.furnitures.map((item: any, index: number) => (
+                                <tr key={index} className="border-b last:border-0">
+                                  <td className="p-3">
                                     {editingFurniture &&
                                     editingFurniture.roomId === room.id &&
                                     editingFurniture.furnitureId === index ? (
-                                      <>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() =>
-                                            handleEditFurniture(
-                                              room.id,
-                                              index,
-                                              Number.parseInt(editValue) || 0,
-                                              editTypeValue,
-                                            )
-                                          }
-                                        >
-                                          <Check className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => setEditingFurniture(null)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={editTypeValue}
+                                          onChange={(e) => setEditTypeValue(e.target.value)}
+                                          className="max-w-[150px]"
+                                        />
+                                      </div>
                                     ) : (
-                                      <>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() =>
-                                            startEditingFurniture(
-                                              room.id,
-                                              index,
-                                              item.count,
-                                              item.type,
-                                            )
-                                          }
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="text-red-500 hover:text-red-600"
-                                          onClick={() => handleDeleteFurniture(room.id, index)}
-                                        >
-                                          <Trash className="h-4 w-4" />
-                                        </Button>
-                                      </>
+                                      <span>{item.type}</span>
                                     )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                  </td>
+                                  <td className="text-center p-3">
+                                    {editingFurniture &&
+                                    editingFurniture.roomId === room.id &&
+                                    editingFurniture.furnitureId === index ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <Input
+                                          type="number"
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          className="max-w-[80px]"
+                                          min="0"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <span>{item.count}</span>
+                                    )}
+                                  </td>
+                                  <td className="text-right p-3">
+                                    <div className="flex justify-end gap-1">
+                                      {editingFurniture &&
+                                      editingFurniture.roomId === room.id &&
+                                      editingFurniture.furnitureId === index ? (
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() =>
+                                              handleEditFurniture(
+                                                room.id,
+                                                index,
+                                                Number.parseInt(editValue) || 0,
+                                                editTypeValue,
+                                              )
+                                            }
+                                          >
+                                            <Check className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setEditingFurniture(null)}
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() =>
+                                              startEditingFurniture(
+                                                room.id,
+                                                index,
+                                                item.count,
+                                                item.type,
+                                              )
+                                            }
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-red-500 hover:text-red-600"
+                                            onClick={() => handleDeleteFurniture(room.id, index)}
+                                          >
+                                            <Trash className="h-4 w-4" />
+                                          </Button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
