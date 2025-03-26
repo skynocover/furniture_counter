@@ -46,6 +46,7 @@ export default function ProjectPage({ params }: any) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [addingRoom, setAddingRoom] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [showChart, setShowChart] = useState(false);
 
   // 初始化數據
   useEffect(() => {
@@ -271,7 +272,6 @@ export default function ProjectPage({ params }: any) {
             <div className="flex justify-between items-center">
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
-                <TabsTrigger value="analysis">圖表</TabsTrigger>
                 {rooms.map((room) => (
                   <TabsTrigger key={room.id} value={`room-${room.id}`}>
                     {room.name}
@@ -335,27 +335,74 @@ export default function ProjectPage({ params }: any) {
             <TabsContent value="overview" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>家具總計</CardTitle>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>家具總計</span>
+                    <Button variant="outline" onClick={() => setShowChart(!showChart)}>
+                      {showChart ? '顯示表格' : '顯示圖表'}
+                    </Button>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted border-b">
-                          <th className="text-left p-3">家具類型</th>
-                          <th className="text-center p-3">總數量</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(furnitureTotals).map(([type, count], index) => (
-                          <tr key={index} className="border-b last:border-0">
-                            <td className="p-3">{type}</td>
-                            <td className="text-center p-3">{count}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="grid gap-6 md:grid-cols-3 mb-6">
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="text-sm text-muted-foreground">總家具數量</div>
+                      <div className="text-2xl font-bold">
+                        {Object.values(furnitureTotals).reduce(
+                          (sum: number, count: number) => sum + count,
+                          0,
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="text-sm text-muted-foreground">家具種類</div>
+                      <div className="text-2xl font-bold">
+                        {Object.keys(furnitureTotals).length} 種
+                      </div>
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="text-sm text-muted-foreground">房間數量</div>
+                      <div className="text-2xl font-bold">{rooms.length} 間</div>
+                    </div>
                   </div>
+
+                  {showChart ? (
+                    <div className="h-[400px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={Object.entries(furnitureTotals).map(([type, count]) => ({
+                            type,
+                            count,
+                          }))}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="type" angle={-45} textAnchor="end" height={60} />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="count" name="數量" fill="#3b82f6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-muted border-b">
+                            <th className="text-left p-3">家具類型</th>
+                            <th className="text-center p-3">數量</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(furnitureTotals).map(([type, count], index) => (
+                            <tr key={index} className="border-b last:border-0">
+                              <td className="p-3">{type}</td>
+                              <td className="text-center p-3">{count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -589,51 +636,6 @@ export default function ProjectPage({ params }: any) {
                 </div>
               </TabsContent>
             ))}
-            <TabsContent value="analysis" className="space-y-6">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="grid gap-6 md:grid-cols-3 mb-6">
-                    <div className="p-4 bg-muted rounded-lg">
-                      <div className="text-sm text-muted-foreground">總家具數量</div>
-                      <div className="text-2xl font-bold">
-                        {Object.values(furnitureTotals).reduce(
-                          (sum: number, count: number) => sum + count,
-                          0,
-                        )}
-                      </div>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <div className="text-sm text-muted-foreground">家具種類</div>
-                      <div className="text-2xl font-bold">
-                        {Object.keys(furnitureTotals).length} 種
-                      </div>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <div className="text-sm text-muted-foreground">房間數量</div>
-                      <div className="text-2xl font-bold">{rooms.length} 間</div>
-                    </div>
-                  </div>
-
-                  <div className="h-[400px] w-full mb-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={Object.entries(furnitureTotals).map(([type, count]) => ({
-                          type,
-                          count,
-                        }))}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="type" angle={-45} textAnchor="end" height={60} />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="count" name="數量" fill="#3b82f6" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </main>
       </div>
