@@ -68,7 +68,7 @@ export default function ProjectPage({ params }: any) {
   }, [id]);
 
   // 計算所有家具的總數
-  const furnitureTotals: any = rooms.reduce((acc, room) => {
+  const furnitureTotals: Record<string, number> = rooms.reduce((acc, room) => {
     if (room.furniture) {
       room.furniture.forEach((item: any) => {
         if (!acc[item.type]) {
@@ -114,7 +114,7 @@ export default function ProjectPage({ params }: any) {
         project_id: Number(id),
         name: roomName,
         pdf_url: pdfUrl || '',
-        furnitures: furniture,
+        furniture: furniture,
       });
 
       setRooms([...rooms, newRoom]);
@@ -150,13 +150,13 @@ export default function ProjectPage({ params }: any) {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return;
 
-      const updatedFurniture = room.furnitures.map((item: any, index: number) =>
+      const updatedFurniture = room.furniture.map((item: any, index: number) =>
         index === furnitureId ? { ...item, count: newCount, type: newType } : item,
       );
 
-      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+      await adminUpdateRoom(roomId, { furniture: updatedFurniture });
 
-      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furniture: updatedFurniture } : r)));
 
       setEditingFurniture(null);
     } catch (error) {
@@ -206,11 +206,11 @@ export default function ProjectPage({ params }: any) {
         count: 1,
       };
 
-      const updatedFurniture = [newFurniture, ...room.furnitures];
+      const updatedFurniture = [newFurniture, ...room.furniture];
 
-      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+      await adminUpdateRoom(roomId, { furniture: updatedFurniture });
 
-      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furniture: updatedFurniture } : r)));
     } catch (error) {
       console.error('Failed to add furniture:', error);
     }
@@ -221,13 +221,13 @@ export default function ProjectPage({ params }: any) {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return;
 
-      const updatedFurniture = room.furnitures.filter(
+      const updatedFurniture = room.furniture.filter(
         (item: any, index: number) => index !== furnitureId,
       );
 
-      await adminUpdateRoom(roomId, { furnitures: updatedFurniture });
+      await adminUpdateRoom(roomId, { furniture: updatedFurniture });
 
-      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furnitures: updatedFurniture } : r)));
+      setRooms(rooms.map((r) => (r.id === roomId ? { ...r, furniture: updatedFurniture } : r)));
     } catch (error) {
       console.error('Failed to delete furniture:', error);
     }
@@ -267,10 +267,11 @@ export default function ProjectPage({ params }: any) {
 
         <main className="p-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-2">
+            {/** Tab按鈕  */}
             <div className="flex justify-between items-center">
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
-                <TabsTrigger value="analysis">分析結果</TabsTrigger>
+                <TabsTrigger value="analysis">圖表</TabsTrigger>
                 {rooms.map((room) => (
                   <TabsTrigger key={room.id} value={`room-${room.id}`}>
                     {room.name}
@@ -349,7 +350,7 @@ export default function ProjectPage({ params }: any) {
                         {Object.entries(furnitureTotals).map(([type, count], index) => (
                           <tr key={index} className="border-b last:border-0">
                             <td className="p-3">{type}</td>
-                            {/* <td className="text-center p-3">{count} 件</td> */}
+                            <td className="text-center p-3">{count}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -357,40 +358,6 @@ export default function ProjectPage({ params }: any) {
                   </div>
                 </CardContent>
               </Card>
-
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {rooms.map((room) => (
-                  <Card key={room.id} className="h-full">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="flex justify-between items-center">
-                        <span>{room.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setActiveTab(`room-${room.id}`);
-                          }}
-                        >
-                          查看
-                        </Button>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-sm text-muted-foreground mb-2">
-                        家具數量:{' '}
-                        {room.furnitures.reduce((sum: number, item: any) => sum + item.count, 0)}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {room.furnitures.map((item: any, index: number) => (
-                          <div key={index} className="text-xs bg-muted px-2 py-1 rounded-full">
-                            {item.type}: {item.count}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
             </TabsContent>
 
             {rooms.map((room) => (
@@ -521,7 +488,7 @@ export default function ProjectPage({ params }: any) {
                               </tr>
                             </thead>
                             <tbody>
-                              {room.furnitures.map((item: any, index: number) => (
+                              {room.furniture.map((item: any, index: number) => (
                                 <tr key={index} className="border-b last:border-0">
                                   <td className="p-3">
                                     {editingFurniture &&
@@ -624,19 +591,15 @@ export default function ProjectPage({ params }: any) {
             ))}
             <TabsContent value="analysis" className="space-y-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>家具分析結果</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-4">
                   <div className="grid gap-6 md:grid-cols-3 mb-6">
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">總家具數量</div>
                       <div className="text-2xl font-bold">
-                        {/* {Object.values(furnitureTotals).reduce(
+                        {Object.values(furnitureTotals).reduce(
                           (sum: number, count: number) => sum + count,
                           0,
-                        )} */}
-                        件
+                        )}
                       </div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
@@ -667,36 +630,6 @@ export default function ProjectPage({ params }: any) {
                         <Bar dataKey="count" name="數量" fill="#3b82f6" />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
-
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted border-b">
-                          <th className="text-left p-3">家具類型</th>
-                          <th className="text-center p-3">總數量</th>
-                          <th className="text-right p-3">佔比</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* {Object.entries(furnitureTotals)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([type, count], index) => {
-                            const total = Object.values(furnitureTotals).reduce(
-                              (sum, count) => sum + count,
-                              0,
-                            );
-                            const percentage = ((count / total) * 100).toFixed(1);
-                            return (
-                              <tr key={index} className="border-b last:border-0">
-                                <td className="p-3">{type}</td>
-                                <td className="text-center p-3">{count} 件</td>
-                                <td className="text-right p-3">{percentage}%</td>
-                              </tr>
-                            );
-                          })} */}
-                      </tbody>
-                    </table>
                   </div>
                 </CardContent>
               </Card>

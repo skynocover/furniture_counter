@@ -142,10 +142,10 @@ export const adminDeleteRoom = async (id: number) => {
 };
 
 // 添加家具相關操作
-export const adminUpdateFurniture = async (roomId: number, furnitures: any[]) => {
+export const adminUpdateFurniture = async (roomId: number, furniture: any[]) => {
   const { data, error } = await supabaseAdmin
     .from('rooms')
-    .update({ furnitures })
+    .update({ furniture })
     .eq('id', roomId)
     .select();
 

@@ -25,7 +25,7 @@ interface FurnitureItem {
 }
 
 interface FurnitureResponse {
-  furnitures: FurnitureItem[];
+  furniture: FurnitureItem[];
 }
 
 /**
@@ -97,7 +97,7 @@ const generationConfig: any = {
   responseSchema: {
     type: 'object',
     properties: {
-      furnitures: {
+      furniture: {
         type: 'array',
         items: {
           type: 'object',
@@ -145,7 +145,7 @@ export const ParseFurniture = async ({
         },
       },
       {
-        text: '這是一個房間的平面設計圖\n當中的 CT-11 CT-12等都是家具的編號\n統計有幾種家具 及他們的數量給我\n\n注意需要列出所有的家具編號跟他們的數量\n\n左上角的表格內容為備註 不需要統計\n\n使用JSON格式回應，格式為 {"furnitures": [{"type": "家具編號", "count": 數量}, ...]}',
+        text: '這是一個房間的平面設計圖\n當中的 CT-11 CT-12等都是家具的編號\n統計有幾種家具 及他們的數量給我\n\n注意需要列出所有的家具編號跟他們的數量\n\n左上角的表格內容為備註 不需要統計\n\n使用JSON格式回應，格式為 {"furniture": [{"type": "家具編號", "count": 數量}, ...]}',
       },
     ]);
 
@@ -161,14 +161,14 @@ export const ParseFurniture = async ({
     const jsonResponse = JSON.parse(jsonMatch[0]) as FurnitureResponse;
     console.log('Parsed furniture:', jsonResponse);
 
-    if (!jsonResponse.furnitures || !Array.isArray(jsonResponse.furnitures)) {
+    if (!jsonResponse.furniture || !Array.isArray(jsonResponse.furniture)) {
       throw new Error('Invalid furniture data structure');
     }
 
-    return jsonResponse.furnitures;
+    return jsonResponse.furniture;
 
     // // Add IDs to furniture items
-    // const furnitureWithIds = jsonResponse.furnitures.map((item, index) => ({
+    // const furnitureWithIds = jsonResponse.furniture.map((item, index) => ({
     //   ...item,
     //   id: index + 1,
     // }));
@@ -176,7 +176,7 @@ export const ParseFurniture = async ({
     // // Update the room with the furniture data
     // const { data, error } = await supabaseAdmin
     //   .from('rooms')
-    //   .update({ furnitures: furnitureWithIds })
+    //   .update({ furniture: furnitureWithIds })
     //   .eq('id', roomId)
     //   .select();
 
