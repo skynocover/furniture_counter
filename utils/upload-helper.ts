@@ -2,10 +2,14 @@
 import supabaseAdmin from './supabase-server';
 import { v4 as uuidv4 } from 'uuid';
 
-export const uploadFileToSupabase = async (file: File, path: string): Promise<string> => {
+export const uploadFileToSupabase = async (
+  file: File,
+  path: string,
+  defaultFileName?: string,
+): Promise<string> => {
   // 創建唯一的文件名來防止衝突
   const fileExt = file.name.split('.').pop();
-  const fileName = `${uuidv4()}.${fileExt}`;
+  const fileName = defaultFileName || `${uuidv4()}.${fileExt}`;
   const filePath = `${path}/${fileName}`;
 
   // 將文件轉換為 Blob 或 ArrayBuffer

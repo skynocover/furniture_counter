@@ -31,18 +31,21 @@ export type Database = {
       projects: {
         Row: {
           created_at: string;
+          floor_mapping: Json | null;
           id: number;
           name: string;
           updated_at: string;
         };
         Insert: {
           created_at?: string;
+          floor_mapping?: Json | null;
           id?: number;
           name: string;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
+          floor_mapping?: Json | null;
           id?: number;
           name?: string;
           updated_at?: string;

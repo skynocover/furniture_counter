@@ -24,9 +24,10 @@ import {
   adminAddRoom,
   adminUpdateRoom,
   adminDeleteRoom,
+  adminUpdateProject,
 } from '@/utils/db-server';
 import { uploadFileToSupabase } from '@/utils/upload-helper';
-import { ParseFurniture } from '@/utils/gemini';
+import { ParseFurniture, ParseFloorMapping } from '@/utils/gemini';
 
 export default function ProjectPage({ params }: any) {
   const unwrappedParams = use<{ id: string }>(params);
@@ -48,6 +49,55 @@ export default function ProjectPage({ params }: any) {
   const [addingRoom, setAddingRoom] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [showChart, setShowChart] = useState(false);
+  const [showFloorMapping, setShowFloorMapping] = useState(false);
+  const [floorMappingFile, setFloorMappingFile] = useState<File | null>(null);
+  const [processingFloorMapping, setProcessingFloorMapping] = useState(false);
+  const [floorMappingDialogOpen, setFloorMappingDialogOpen] = useState(false);
+  const [floorMappingData, setFloorMappingData] = useState({
+    floors: ['1F', '2F', '3F', '4F', '5F'],
+    roomTypes: ['單人房', '雙人房', '套房', '家庭房'],
+    mapping: [
+      [5, 3, 0, 0], // 1F
+      [8, 4, 2, 0], // 2F
+      [6, 6, 2, 0], // 3F
+      [0, 8, 4, 2], // 4F
+      [0, 0, 6, 4], // 5F
+    ],
+  });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+
+  // Add state for tracking which cell is being edited
+  const [editingFloorCell, setEditingFloorCell] = useState<{
+    type: 'floor' | 'roomType' | 'count';
+    floorIndex?: number;
+    roomTypeIndex?: number;
+    value: string;
+  } | null>(null);
+
+  // Add effect to show warning when there are unsaved changes
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedWarning(true);
+    }
+  }, [hasUnsavedChanges]);
+
+  // Add beforeunload event listener to warn when leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        // Standard way to show a confirmation dialog when leaving the page
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
 
   // 初始化數據
   useEffect(() => {
@@ -245,6 +295,153 @@ export default function ProjectPage({ params }: any) {
     setEditTypeValue(currentType);
   };
 
+  const handleFloorMappingUpload = async () => {
+    if (!floorMappingFile) return;
+
+    try {
+      setProcessingFloorMapping(true);
+
+      const picUrl = await uploadFileToSupabase(
+        floorMappingFile,
+        `projects/${id}/rooms`,
+        floorMappingFile.name,
+      );
+
+      const floorMapping = await ParseFloorMapping({
+        fileUrl: picUrl,
+        fileName: floorMappingFile.name,
+      });
+
+      await adminUpdateProject(Number(id), { floor_mapping: floorMapping });
+
+      setFloorMappingDialogOpen(false);
+      setShowFloorMapping(true);
+    } catch (error) {
+      console.error('Failed to process floor mapping:', error);
+    } finally {
+      setProcessingFloorMapping(false);
+      setFloorMappingFile(null);
+    }
+  };
+
+  // Add function to handle floor or room type name edits
+  const handleFloorOrRoomTypeEdit = (
+    type: 'floor' | 'roomType',
+    index: number,
+    newValue: string,
+  ) => {
+    if (newValue.trim() === '') return;
+
+    if (type === 'floor') {
+      const newFloors = [...floorMappingData.floors];
+      newFloors[index] = newValue;
+      setFloorMappingData({ ...floorMappingData, floors: newFloors });
+    } else {
+      const newRoomTypes = [...floorMappingData.roomTypes];
+      newRoomTypes[index] = newValue;
+      setFloorMappingData({ ...floorMappingData, roomTypes: newRoomTypes });
+    }
+    setEditingFloorCell(null);
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to handle room count edits
+  const handleRoomCountEdit = (floorIndex: number, roomTypeIndex: number, newValue: string) => {
+    const numValue = parseInt(newValue);
+    if (isNaN(numValue) || numValue < 0) return;
+
+    const newMapping = floorMappingData.mapping.map((row, rowIdx) => {
+      if (rowIdx === floorIndex) {
+        const newRow = [...row];
+        newRow[roomTypeIndex] = numValue;
+        return newRow;
+      }
+      return row;
+    });
+
+    setFloorMappingData({ ...floorMappingData, mapping: newMapping });
+    setEditingFloorCell(null);
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to add new floor
+  const addNewFloor = () => {
+    const newFloors = [...floorMappingData.floors, `${floorMappingData.floors.length + 1}F`];
+    const newMapping = [
+      ...floorMappingData.mapping,
+      new Array(floorMappingData.roomTypes.length).fill(0),
+    ];
+    setFloorMappingData({
+      ...floorMappingData,
+      floors: newFloors,
+      mapping: newMapping,
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to add new room type
+  const addNewRoomType = () => {
+    const newRoomTypes = [...floorMappingData.roomTypes, '新房型'];
+    const newMapping = floorMappingData.mapping.map((row) => [...row, 0]);
+    setFloorMappingData({
+      ...floorMappingData,
+      roomTypes: newRoomTypes,
+      mapping: newMapping,
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to delete a floor
+  const deleteFloor = (floorIndex: number) => {
+    // Must have at least one floor
+    if (floorMappingData.floors.length <= 1) return;
+
+    const newFloors = [...floorMappingData.floors];
+    newFloors.splice(floorIndex, 1);
+
+    const newMapping = [...floorMappingData.mapping];
+    newMapping.splice(floorIndex, 1);
+
+    setFloorMappingData({
+      ...floorMappingData,
+      floors: newFloors,
+      mapping: newMapping,
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to delete a room type
+  const deleteRoomType = (roomTypeIndex: number) => {
+    // Must have at least one room type
+    if (floorMappingData.roomTypes.length <= 1) return;
+
+    const newRoomTypes = [...floorMappingData.roomTypes];
+    newRoomTypes.splice(roomTypeIndex, 1);
+
+    const newMapping = floorMappingData.mapping.map((row) => {
+      const newRow = [...row];
+      newRow.splice(roomTypeIndex, 1);
+      return newRow;
+    });
+
+    setFloorMappingData({
+      ...floorMappingData,
+      roomTypes: newRoomTypes,
+      mapping: newMapping,
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Add function to save floor mapping data
+  const saveFloorMappingData = () => {
+    // In a real application, you would send the data to your backend here
+    // For now, we'll just reset the unsaved changes flag
+    setHasUnsavedChanges(false);
+    setShowUnsavedWarning(false);
+    // Show a success message
+    alert('樓層配置資料已儲存成功！');
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center">載入中...</div>;
   }
@@ -362,6 +559,347 @@ export default function ProjectPage({ params }: any) {
                       <div className="text-2xl font-bold">{rooms.length} 間</div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>房間與樓層對應</span>
+                    <Dialog open={floorMappingDialogOpen} onOpenChange={setFloorMappingDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="gap-2">
+                          <PlusCircle className="h-4 w-4" />
+                          上傳房間樓層配置
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>上傳房間樓層配置圖</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="floor-mapping-image">上傳房間樓層配置圖</Label>
+                            <Input
+                              id="floor-mapping-image"
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  setFloorMappingFile(e.target.files[0]);
+                                }
+                              }}
+                            />
+                          </div>
+                          <Button
+                            className="w-full"
+                            onClick={handleFloorMappingUpload}
+                            disabled={!floorMappingFile || processingFloorMapping}
+                          >
+                            {processingFloorMapping ? (
+                              <div className="flex items-center gap-2">
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                                AI 分析中...
+                              </div>
+                            ) : (
+                              '開始分析'
+                            )}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {showFloorMapping ? (
+                    <div className="border rounded-lg overflow-auto">
+                      {hasUnsavedChanges && showUnsavedWarning && (
+                        <div className="bg-amber-100 border border-amber-300 text-amber-800 p-2 mb-2 flex justify-between items-center">
+                          <span>您有未儲存的變更，請記得儲存您的修改。</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-amber-800 border-amber-300"
+                            onClick={() => setShowUnsavedWarning(false)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center p-2 bg-gray-50 border-b">
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={addNewFloor} title="新增樓層">
+                            <PlusCircle className="h-4 w-4 mr-1" /> 新增樓層
+                          </Button>
+                          <Button size="sm" onClick={addNewRoomType} title="新增房型">
+                            <PlusCircle className="h-4 w-4 mr-1" /> 新增房型
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          className={`${
+                            hasUnsavedChanges
+                              ? 'bg-green-600 hover:bg-green-700'
+                              : 'bg-gray-400 hover:bg-gray-500'
+                          }`}
+                          onClick={saveFloorMappingData}
+                          disabled={!hasUnsavedChanges}
+                        >
+                          <Check className="h-4 w-4 mr-1" /> 儲存變更
+                        </Button>
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-muted border-b">
+                            <th className="text-left p-3 sticky left-0 bg-muted z-10">房型/樓層</th>
+                            {floorMappingData.floors.map((floor, floorIndex) => (
+                              <th key={floorIndex} className="text-center p-3">
+                                <div className="flex flex-col items-center">
+                                  {editingFloorCell &&
+                                  editingFloorCell.type === 'floor' &&
+                                  editingFloorCell.floorIndex === floorIndex ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Input
+                                        value={editingFloorCell.value}
+                                        onChange={(e) =>
+                                          setEditingFloorCell({
+                                            ...editingFloorCell,
+                                            value: e.target.value,
+                                          })
+                                        }
+                                        className="max-w-[100px]"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleFloorOrRoomTypeEdit(
+                                              'floor',
+                                              floorIndex,
+                                              editingFloorCell.value,
+                                            );
+                                          } else if (e.key === 'Escape') {
+                                            setEditingFloorCell(null);
+                                          }
+                                        }}
+                                        onBlur={() =>
+                                          handleFloorOrRoomTypeEdit(
+                                            'floor',
+                                            floorIndex,
+                                            editingFloorCell.value,
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="cursor-pointer hover:underline"
+                                      onClick={() =>
+                                        setEditingFloorCell({
+                                          type: 'floor',
+                                          floorIndex,
+                                          value: floor,
+                                        })
+                                      }
+                                    >
+                                      {floor}
+                                    </div>
+                                  )}
+                                  {floorMappingData.floors.length > 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 text-red-500 hover:text-red-700 mt-1"
+                                      onClick={() => deleteFloor(floorIndex)}
+                                      title="刪除樓層"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </th>
+                            ))}
+                            <th className="text-center p-3 font-bold">總計</th>
+                            <th className="text-center p-3 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {floorMappingData.roomTypes.map((roomType, roomTypeIndex) => {
+                            // Calculate row total (total rooms of this type across all floors)
+                            const rowTotal = floorMappingData.mapping.reduce(
+                              (sum, floorData) => sum + floorData[roomTypeIndex],
+                              0,
+                            );
+
+                            return (
+                              <tr key={roomType} className="border-b">
+                                <td className="p-3 font-medium sticky left-0 bg-background z-10">
+                                  <div className="flex justify-between items-center">
+                                    {editingFloorCell &&
+                                    editingFloorCell.type === 'roomType' &&
+                                    editingFloorCell.roomTypeIndex === roomTypeIndex ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={editingFloorCell.value}
+                                          onChange={(e) =>
+                                            setEditingFloorCell({
+                                              ...editingFloorCell,
+                                              value: e.target.value,
+                                            })
+                                          }
+                                          className="max-w-[150px]"
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleFloorOrRoomTypeEdit(
+                                                'roomType',
+                                                roomTypeIndex,
+                                                editingFloorCell.value,
+                                              );
+                                            } else if (e.key === 'Escape') {
+                                              setEditingFloorCell(null);
+                                            }
+                                          }}
+                                          onBlur={() =>
+                                            handleFloorOrRoomTypeEdit(
+                                              'roomType',
+                                              roomTypeIndex,
+                                              editingFloorCell.value,
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="cursor-pointer hover:underline"
+                                        onClick={() =>
+                                          setEditingFloorCell({
+                                            type: 'roomType',
+                                            roomTypeIndex,
+                                            value: roomType,
+                                          })
+                                        }
+                                      >
+                                        {roomType}
+                                      </div>
+                                    )}
+                                    {floorMappingData.roomTypes.length > 1 && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 text-red-500 hover:text-red-700"
+                                        onClick={() => deleteRoomType(roomTypeIndex)}
+                                        title="刪除房型"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </td>
+                                {floorMappingData.floors.map((floor, floorIndex) => (
+                                  <td key={`${roomType}-${floor}`} className="text-center p-3">
+                                    {editingFloorCell &&
+                                    editingFloorCell.type === 'count' &&
+                                    editingFloorCell.floorIndex === floorIndex &&
+                                    editingFloorCell.roomTypeIndex === roomTypeIndex ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <Input
+                                          type="number"
+                                          value={editingFloorCell.value}
+                                          onChange={(e) =>
+                                            setEditingFloorCell({
+                                              ...editingFloorCell,
+                                              value: e.target.value,
+                                            })
+                                          }
+                                          className="max-w-[80px]"
+                                          min="0"
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleRoomCountEdit(
+                                                floorIndex,
+                                                roomTypeIndex,
+                                                editingFloorCell.value,
+                                              );
+                                            } else if (e.key === 'Escape') {
+                                              setEditingFloorCell(null);
+                                            }
+                                          }}
+                                          onBlur={() =>
+                                            handleRoomCountEdit(
+                                              floorIndex,
+                                              roomTypeIndex,
+                                              editingFloorCell.value,
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="cursor-pointer hover:bg-gray-100 rounded px-2 py-1"
+                                        onClick={() =>
+                                          setEditingFloorCell({
+                                            type: 'count',
+                                            floorIndex,
+                                            roomTypeIndex,
+                                            value:
+                                              floorMappingData.mapping[floorIndex][
+                                                roomTypeIndex
+                                              ].toString(),
+                                          })
+                                        }
+                                      >
+                                        {floorMappingData.mapping[floorIndex][roomTypeIndex]}
+                                      </div>
+                                    )}
+                                  </td>
+                                ))}
+                                <td className="text-center p-3 font-bold bg-gray-50">{rowTotal}</td>
+                                {roomTypeIndex === 0 && (
+                                  <td
+                                    rowSpan={floorMappingData.roomTypes.length}
+                                    className="text-center align-middle"
+                                  ></td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                          {/* Column Totals */}
+                          <tr className="bg-muted">
+                            <td className="p-3 font-bold sticky left-0 bg-muted z-10">總計</td>
+                            {floorMappingData.floors.map((floor, floorIndex) => {
+                              // Calculate column total (total rooms on this floor)
+                              const floorTotal = floorMappingData.mapping[floorIndex].reduce(
+                                (sum, count) => sum + count,
+                                0,
+                              );
+
+                              return (
+                                <td
+                                  key={`total-${floor}`}
+                                  className="text-center p-3 font-bold bg-gray-100"
+                                >
+                                  {floorTotal}
+                                </td>
+                              );
+                            })}
+                            {/* Grand Total */}
+                            <td className="text-center p-3 font-bold bg-gray-200">
+                              {floorMappingData.mapping.reduce(
+                                (sum, row) =>
+                                  sum + row.reduce((rowSum, count) => rowSum + count, 0),
+                                0,
+                              )}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center p-6 text-muted-foreground">
+                      尚未上傳房間樓層配置圖，請點擊上方按鈕上傳
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

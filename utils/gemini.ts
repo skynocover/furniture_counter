@@ -167,3 +167,107 @@ export const ParseFurniture = async ({
     throw error;
   }
 };
+
+/// 樓層 mapping
+const generationConfigFloorMapping: any = {
+  temperature: 1,
+  topP: 0.95,
+  topK: 40,
+  maxOutputTokens: 8192,
+  responseModalities: [],
+  responseMimeType: 'application/json',
+  responseSchema: {
+    type: 'object',
+    properties: {
+      room: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+            },
+            total: {
+              type: 'integer',
+            },
+            floors: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: {
+                    type: 'string',
+                  },
+                  count: {
+                    type: 'integer',
+                  },
+                },
+                required: ['name', 'count'],
+              },
+            },
+          },
+          required: ['name', 'total', 'floors'],
+        },
+      },
+    },
+    required: ['room'],
+  },
+};
+
+const modelFloorMapping = genAI.getGenerativeModel({
+  model: 'gemini-2.0-flash',
+});
+
+export const ParseFloorMapping = async ({
+  fileUrl,
+  fileName,
+}: {
+  fileUrl: string;
+  fileName: string;
+}) => {
+  try {
+    const extension = fileUrl.split('.').pop() || '';
+    const mimeType = `image/${extension}`;
+    // 使用URL上傳檔案
+    const files = [await uploadToGeminiFromUrl(fileUrl, mimeType, fileName)];
+    console.log('🚀 ~ files:', files);
+
+    // Some files have a processing delay. Wait for them to be ready.
+    await waitForFilesActive(files);
+
+    const chatSession = modelFloorMapping.startChat({
+      generationConfig: generationConfigFloorMapping,
+    });
+
+    // Add the prompt and file to the chat session
+    const result = await chatSession.sendMessage([
+      {
+        fileData: {
+          mimeType: files[0].mimeType,
+          fileUri: files[0].uri,
+        },
+      },
+      { text: '這是一個房型與樓層的對照表\n使用JSON格式讀取出來' },
+    ]);
+
+    const responseText = result.response.text();
+
+    // Extract the JSON part from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    const jsonResponse = JSON.parse(jsonMatch[0]);
+    console.log('Parsed furniture:', jsonResponse);
+
+    if (!jsonResponse.room || !Array.isArray(jsonResponse.room)) {
+      throw new Error('Invalid furniture data structure');
+    }
+
+    return jsonResponse.room;
+  } catch (error) {
+    console.error('Error in ParseFurniture:', error);
+    throw error;
+  }
+};
