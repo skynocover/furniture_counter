@@ -72,6 +72,8 @@ export default function ProjectPage({ params }: any) {
   const [editingProject, setEditingProject] = useState(false);
   const [editProjectName, setEditProjectName] = useState('');
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
+  // Add state for viewing floor mapping image
+  const [viewImageDialogOpen, setViewImageDialogOpen] = useState(false);
 
   // Add state for tracking which cell is being edited
   const [editingFloorCell, setEditingFloorCell] = useState<{
@@ -227,17 +229,6 @@ export default function ProjectPage({ params }: any) {
     }
   };
 
-  const handleUploadPdf = async (roomId: number, file: File) => {
-    try {
-      const pdfUrl = await uploadFileToSupabase(file, `projects/${id}/rooms`);
-      await adminUpdateRoom(roomId, { pdf_url: pdfUrl });
-
-      setRooms(rooms.map((room) => (room.id === roomId ? { ...room, pdf_url: pdfUrl } : room)));
-    } catch (error) {
-      console.error('Failed to upload PDF:', error);
-    }
-  };
-
   const handleDeleteRoom = async (roomId: number) => {
     try {
       await adminDeleteRoom(roomId);
@@ -316,7 +307,7 @@ export default function ProjectPage({ params }: any) {
       const picUrl = await uploadFileToSupabase(
         floorMappingFile,
         `projects/${id}/rooms`,
-        floorMappingFile.name,
+        'room mix.png',
       );
 
       // Get floor mapping data from AI analysis
@@ -968,6 +959,14 @@ export default function ProjectPage({ params }: any) {
                         <Button onClick={() => saveFloorMappingData()}>儲存變更</Button>
                       )}
 
+                      <Button
+                        onClick={() => setViewImageDialogOpen(true)}
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        查看原始配置圖
+                      </Button>
+
                       <Dialog
                         open={floorMappingDialogOpen}
                         onOpenChange={setFloorMappingDialogOpen}
@@ -1249,6 +1248,21 @@ export default function ProjectPage({ params }: any) {
                   )}
                 </CardContent>
               </Card>
+
+              <Dialog open={viewImageDialogOpen} onOpenChange={setViewImageDialogOpen}>
+                <DialogContent className="max-w-8xl">
+                  <DialogHeader>
+                    <DialogTitle>樓層配置原始圖片</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex justify-center items-center p-4">
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/furniture-system/projects/${id}/rooms/room%20mix.png`}
+                      alt="樓層配置圖"
+                      className="max-w-full max-h-[80vh] object-contain"
+                    />
+                  </div>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             <TabsContent value="details" className="space-y-6">
@@ -1350,16 +1364,7 @@ export default function ProjectPage({ params }: any) {
                           )}
                           <div className="flex gap-2">
                             <label className="cursor-pointer">
-                              <input
-                                type="file"
-                                accept=".pdf"
-                                className="hidden"
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    handleUploadPdf(room.id, e.target.files[0]);
-                                  }
-                                }}
-                              />
+                              <input type="file" accept=".pdf" className="hidden" />
                             </label>
 
                             {confirmDelete === room.id ? (
