@@ -27,6 +27,7 @@ import {
   adminUpdateRoom,
   adminDeleteRoom,
   adminUpdateProject,
+  adminDeleteProject,
 } from '@/utils/db-server';
 import { uploadFileToSupabase } from '@/utils/upload-helper';
 import { ParseFurniture, ParseFloorMapping } from '@/utils/gemini';
@@ -68,6 +69,9 @@ export default function ProjectPage({ params }: any) {
   const [floorMappingData, setFloorMappingData] = useState<FloorMapping[] | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
 
   // Add state for tracking which cell is being edited
   const [editingFloorCell, setEditingFloorCell] = useState<{
@@ -565,6 +569,28 @@ export default function ProjectPage({ params }: any) {
     document.body.removeChild(link);
   };
 
+  // 處理專案名稱編輯
+  const handleEditProjectName = async (newName: string) => {
+    try {
+      await adminUpdateProject(Number(id), { name: newName });
+      setProject({ ...project, name: newName });
+      setEditingProject(false);
+    } catch (error) {
+      console.error('Failed to update project name:', error);
+    }
+  };
+
+  // 處理刪除專案
+  const handleDeleteProject = async () => {
+    try {
+      await adminDeleteProject(Number(id));
+      // 重定向到專案列表頁面
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center">載入中...</div>;
   }
@@ -578,8 +604,59 @@ export default function ProjectPage({ params }: any) {
       {/* 主內容區 */}
       <div className="flex-1 ">
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-white px-6">
-          <h1 className="text-lg font-semibold">{project.name}</h1>
+          {editingProject ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={editProjectName}
+                onChange={(e) => setEditProjectName(e.target.value)}
+                className="max-w-[300px]"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleEditProjectName(editProjectName)}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setEditingProject(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold">{project.name}</h1>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setEditingProject(true);
+                  setEditProjectName(project.name);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           <div className="ml-auto flex items-center gap-4">
+            {confirmDeleteProject ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-500">確定要刪除專案?</span>
+                <Button variant="destructive" size="sm" onClick={handleDeleteProject}>
+                  確認
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDeleteProject(false)}>
+                  取消
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="text-red-500"
+                onClick={() => setConfirmDeleteProject(true)}
+              >
+                刪除專案
+              </Button>
+            )}
             <Link href="/">
               <Button variant="outline">返回專案列表</Button>
             </Link>
