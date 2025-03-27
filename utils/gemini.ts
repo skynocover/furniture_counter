@@ -1,7 +1,6 @@
 'use server';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
-import supabaseAdmin from './supabase-server';
 
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
@@ -119,11 +118,9 @@ const generationConfig: any = {
 export const ParseFurniture = async ({
   fileUrl,
   fileName,
-  roomId,
 }: {
   fileUrl: string;
   fileName: string;
-  roomId: number;
 }) => {
   try {
     // 使用URL上傳檔案
@@ -150,7 +147,6 @@ export const ParseFurniture = async ({
     ]);
 
     const responseText = result.response.text();
-    // console.log('Gemini response:', responseText);
 
     // Extract the JSON part from the response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -166,26 +162,6 @@ export const ParseFurniture = async ({
     }
 
     return jsonResponse.furniture;
-
-    // // Add IDs to furniture items
-    // const furnitureWithIds = jsonResponse.furniture.map((item, index) => ({
-    //   ...item,
-    //   id: index + 1,
-    // }));
-
-    // // Update the room with the furniture data
-    // const { data, error } = await supabaseAdmin
-    //   .from('rooms')
-    //   .update({ furniture: furnitureWithIds })
-    //   .eq('id', roomId)
-    //   .select();
-
-    // if (error) {
-    //   console.error('Error updating room with furniture data:', error);
-    //   throw error;
-    // }
-
-    // return data[0];
   } catch (error) {
     console.error('Error in ParseFurniture:', error);
     throw error;

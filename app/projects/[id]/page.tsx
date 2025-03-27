@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { PlusCircle, FileText, Upload, Save, Pencil, Check, X, Trash } from 'lucide-react';
+import { PlusCircle, Pencil, Check, X, Trash } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+
 import {
   adminGetProjectById,
   adminGetRooms,
@@ -108,7 +109,6 @@ export default function ProjectPage({ params }: any) {
       const furniture: any = await ParseFurniture({
         fileUrl: pdfUrl,
         fileName: pdfFile?.name || '',
-        roomId: Number(id),
       });
 
       const newRoom = await adminAddRoom({
@@ -272,6 +272,7 @@ export default function ProjectPage({ params }: any) {
             <div className="flex justify-between items-center">
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
+                <TabsTrigger value="details">細項</TabsTrigger>
                 {rooms.map((room) => (
                   <TabsTrigger key={room.id} value={`room-${room.id}`}>
                     {room.name}
@@ -337,9 +338,6 @@ export default function ProjectPage({ params }: any) {
                 <CardHeader>
                   <CardTitle className="flex justify-between items-center">
                     <span>家具總計</span>
-                    <Button variant="outline" onClick={() => setShowChart(!showChart)}>
-                      {showChart ? '顯示表格' : '顯示圖表'}
-                    </Button>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -364,7 +362,21 @@ export default function ProjectPage({ params }: any) {
                       <div className="text-2xl font-bold">{rooms.length} 間</div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
+            <TabsContent value="details" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>家具細項統計</span>
+                    <Button variant="outline" onClick={() => setShowChart(!showChart)}>
+                      {showChart ? '顯示表格' : '顯示圖表'}
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
                   {showChart ? (
                     <div className="h-[400px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
@@ -383,25 +395,55 @@ export default function ProjectPage({ params }: any) {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                  ) : (
-                    <div className="border rounded-lg overflow-hidden">
+                  ) : rooms.length > 0 ? (
+                    <div className="border rounded-lg overflow-auto">
                       <table className="w-full">
                         <thead>
                           <tr className="bg-muted border-b">
-                            <th className="text-left p-3">家具類型</th>
-                            <th className="text-center p-3">數量</th>
+                            <th className="text-left p-3 sticky left-0 bg-muted z-10">房間</th>
+                            {Object.keys(furnitureTotals).map((type) => (
+                              <th key={type} className="text-center p-3">
+                                {type}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.entries(furnitureTotals).map(([type, count], index) => (
-                            <tr key={index} className="border-b last:border-0">
-                              <td className="p-3">{type}</td>
-                              <td className="text-center p-3">{count}</td>
-                            </tr>
-                          ))}
+                          {rooms.map((room) => {
+                            // 計算該房間每種家具的數量
+                            const roomFurnitureCounts: Record<string, number> = {};
+
+                            room.furniture?.forEach((item: any) => {
+                              roomFurnitureCounts[item.type] = item.count;
+                            });
+
+                            return (
+                              <tr key={room.id} className="border-b">
+                                <td className="p-3 font-medium sticky left-0 bg-background z-10">
+                                  {room.name}
+                                </td>
+                                {Object.keys(furnitureTotals).map((type) => (
+                                  <td key={type} className="text-center p-3">
+                                    {roomFurnitureCounts[type] || 0}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                          {/* 總計 */}
+                          <tr className="bg-muted">
+                            <td className="p-3 font-bold sticky left-0 bg-muted z-10">總計</td>
+                            {Object.keys(furnitureTotals).map((type) => (
+                              <td key={type} className="text-center p-3 font-bold">
+                                {furnitureTotals[type]}
+                              </td>
+                            ))}
+                          </tr>
                         </tbody>
                       </table>
                     </div>
+                  ) : (
+                    <div className="text-center p-6 text-muted-foreground">尚未新增任何房間</div>
                   )}
                 </CardContent>
               </Card>
