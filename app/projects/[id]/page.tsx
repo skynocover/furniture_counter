@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { PlusCircle, Pencil, Check, X, Trash } from 'lucide-react';
+import { PlusCircle, Pencil, Check, X, Trash, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 import { Database } from '@/types/supabase';
@@ -490,6 +490,81 @@ export default function ProjectPage({ params }: any) {
     }
   };
 
+  // Add function to download table as Excel
+  const downloadAsExcel = () => {
+    if (!floorMappingData || Object.keys(furnitureTotals).length === 0) return;
+
+    // Create array for Excel export
+    const tableData = Object.keys(furnitureTotals).map((furnitureType) => {
+      // Calculate room type furniture mapping (same logic as in the table)
+      const roomTypeMap: Record<string, { count: number; furniture: number }> = {};
+
+      if (floorMappingData) {
+        floorMappingData.forEach((roomType) => {
+          const lowerCaseRoomName = roomType.name.toLowerCase();
+          if (!roomTypeMap[lowerCaseRoomName]) {
+            roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
+          }
+          roomTypeMap[lowerCaseRoomName].count += roomType.total;
+        });
+      }
+
+      rooms.forEach((room) => {
+        const lowerCaseRoomName = room.name.toLowerCase();
+        const furnitureCount =
+          room.furniture?.find((item: any) => item.type === furnitureType)?.count || 0;
+
+        Object.keys(roomTypeMap).forEach((roomType) => {
+          if (lowerCaseRoomName.includes(roomType)) {
+            roomTypeMap[roomType].furniture = furnitureCount;
+          }
+        });
+      });
+
+      // Calculate total
+      let totalFurniture = 0;
+      const breakdown: string[] = [];
+
+      Object.entries(roomTypeMap).forEach(([roomType, data]) => {
+        if (data.furniture > 0) {
+          const roomTypeTotalFurniture = data.count * data.furniture;
+          totalFurniture += roomTypeTotalFurniture;
+          breakdown.push(`${roomType}: ${data.count}×${data.furniture}`);
+        }
+      });
+
+      return {
+        家具類型: furnitureType,
+        總數量: totalFurniture,
+        明細: breakdown.join(', '),
+      };
+    });
+
+    // Convert to CSV
+    const headers = ['家具類型', '總數量', '明細'];
+    let csvContent = headers.join(',') + '\n';
+
+    tableData.forEach((row) => {
+      const values = headers.map((header) => {
+        const value = row[header as keyof typeof row];
+        // Wrap in quotes to handle commas in the content
+        return typeof value === 'string' ? `"${value}"` : value;
+      });
+      csvContent += values.join(',') + '\n';
+    });
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${project.name}-家具統計.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center">載入中...</div>;
   }
@@ -518,6 +593,7 @@ export default function ProjectPage({ params }: any) {
               <TabsList>
                 <TabsTrigger value="overview">總覽</TabsTrigger>
                 <TabsTrigger value="details">細項</TabsTrigger>
+                <TabsTrigger value="mapping">房間與樓層對應</TabsTrigger>
                 {rooms.map((room) => (
                   <TabsTrigger key={room.id} value={`room-${room.id}`}>
                     {room.name}
@@ -610,6 +686,191 @@ export default function ProjectPage({ params }: any) {
                 </CardContent>
               </Card>
 
+              {/* 依據樓層配置計算家具總數 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>依據樓層配置計算家具總數</span>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setShowChart(!showChart)}>
+                        {showChart ? '顯示表格' : '顯示圖表'}
+                      </Button>
+                      <Button variant="outline" onClick={downloadAsExcel} className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Download
+                      </Button>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {showChart ? (
+                    <div className="h-[400px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={Object.keys(furnitureTotals).map((furnitureType) => {
+                            // 計算每個房間類型的家具數量（不區分大小寫）
+                            const roomTypeMap: Record<
+                              string,
+                              { count: number; furniture: number }
+                            > = {};
+
+                            // 整理樓層資料中的每種房型總數
+                            if (floorMappingData) {
+                              floorMappingData.forEach((roomType) => {
+                                const lowerCaseRoomName = roomType.name.toLowerCase();
+                                if (!roomTypeMap[lowerCaseRoomName]) {
+                                  roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
+                                }
+                                roomTypeMap[lowerCaseRoomName].count += roomType.total;
+                              });
+                            }
+
+                            // 將每個房間的家具資料對應到房型
+                            rooms.forEach((room) => {
+                              const lowerCaseRoomName = room.name.toLowerCase();
+                              const furnitureCount =
+                                room.furniture?.find((item: any) => item.type === furnitureType)
+                                  ?.count || 0;
+
+                              // 將家具數量分配到對應的房型
+                              Object.keys(roomTypeMap).forEach((roomType) => {
+                                if (lowerCaseRoomName.includes(roomType)) {
+                                  roomTypeMap[roomType].furniture = furnitureCount;
+                                }
+                              });
+                            });
+
+                            // 計算總數
+                            let totalFurniture = 0;
+
+                            Object.entries(roomTypeMap).forEach(([roomType, data]) => {
+                              if (data.furniture > 0) {
+                                const roomTypeTotalFurniture = data.count * data.furniture;
+                                totalFurniture += roomTypeTotalFurniture;
+                              }
+                            });
+
+                            return {
+                              type: furnitureType,
+                              count: totalFurniture,
+                            };
+                          })}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="type" angle={-45} textAnchor="end" height={60} />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="count" name="數量" fill="#3b82f6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : floorMappingData && rooms.length > 0 ? (
+                    <div className="border rounded-lg overflow-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-muted border-b">
+                            <th className="text-left p-3 sticky left-0 bg-muted z-10">家具類型</th>
+                            <th className="text-center p-3">總數量</th>
+                            <th className="text-left p-3 whitespace-nowrap">數量</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.keys(furnitureTotals).map((furnitureType) => {
+                            // 計算每個房間類型的家具數量（不區分大小寫）
+                            const roomTypeMap: Record<
+                              string,
+                              { count: number; furniture: number }
+                            > = {};
+
+                            // 整理樓層資料中的每種房型總數
+                            floorMappingData.forEach((roomType) => {
+                              const lowerCaseRoomName = roomType.name.toLowerCase();
+                              if (!roomTypeMap[lowerCaseRoomName]) {
+                                roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
+                              }
+                              roomTypeMap[lowerCaseRoomName].count += roomType.total;
+                            });
+
+                            // 將每個房間的家具資料對應到房型
+                            rooms.forEach((room) => {
+                              const lowerCaseRoomName = room.name.toLowerCase();
+                              const furnitureCount =
+                                room.furniture?.find((item: any) => item.type === furnitureType)
+                                  ?.count || 0;
+
+                              // 將家具數量分配到對應的房型
+                              Object.keys(roomTypeMap).forEach((roomType) => {
+                                if (lowerCaseRoomName.includes(roomType)) {
+                                  roomTypeMap[roomType].furniture = furnitureCount;
+                                }
+                              });
+                            });
+
+                            // 計算總數
+                            let totalFurniture = 0;
+                            const quantityBreakdown: {
+                              roomType: string;
+                              count: number;
+                              furniture: number;
+                            }[] = [];
+
+                            Object.entries(roomTypeMap).forEach(([roomType, data]) => {
+                              if (data.furniture > 0) {
+                                const roomTypeTotalFurniture = data.count * data.furniture;
+                                totalFurniture += roomTypeTotalFurniture;
+                                quantityBreakdown.push({
+                                  roomType,
+                                  count: data.count,
+                                  furniture: data.furniture,
+                                });
+                              }
+                            });
+
+                            return (
+                              <tr key={furnitureType} className="border-b">
+                                <td className="p-3 font-medium sticky left-0 bg-background z-10">
+                                  {furnitureType}
+                                </td>
+                                <td className="text-center p-3 font-bold">{totalFurniture}</td>
+                                <td className="p-3">
+                                  <div className="flex flex-wrap gap-3">
+                                    {quantityBreakdown.length > 0 ? (
+                                      quantityBreakdown.map((item, idx) => (
+                                        <div key={idx} className="whitespace-nowrap">
+                                          <div className="text-xs text-muted-foreground">
+                                            {item.roomType}
+                                          </div>
+                                          <div className="font-medium">
+                                            {item.count}×{item.furniture}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <span className="text-muted-foreground">無數據</span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center p-6 text-muted-foreground">
+                      {!floorMappingData
+                        ? '尚未上傳樓層配置資料'
+                        : !rooms.length
+                        ? '尚未新增任何房間'
+                        : '無法計算'}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="mapping" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex justify-between items-center">
@@ -918,31 +1179,10 @@ export default function ProjectPage({ params }: any) {
                 <CardHeader>
                   <CardTitle className="flex justify-between items-center">
                     <span>家具細項統計</span>
-                    <Button variant="outline" onClick={() => setShowChart(!showChart)}>
-                      {showChart ? '顯示表格' : '顯示圖表'}
-                    </Button>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {showChart ? (
-                    <div className="h-[400px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={Object.entries(furnitureTotals).map(([type, count]) => ({
-                            type,
-                            count,
-                          }))}
-                          margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="type" angle={-45} textAnchor="end" height={60} />
-                          <YAxis />
-                          <Tooltip />
-                          <Bar dataKey="count" name="數量" fill="#3b82f6" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : rooms.length > 0 ? (
+                  {rooms.length > 0 ? (
                     <div className="border rounded-lg overflow-auto">
                       <table className="w-full">
                         <thead>
@@ -977,130 +1217,11 @@ export default function ProjectPage({ params }: any) {
                               </tr>
                             );
                           })}
-                          {/* 總計 */}
-                          <tr className="bg-muted">
-                            <td className="p-3 font-bold sticky left-0 bg-muted z-10">總計</td>
-                            {Object.keys(furnitureTotals).map((type) => (
-                              <td key={type} className="text-center p-3 font-bold">
-                                {furnitureTotals[type]}
-                              </td>
-                            ))}
-                          </tr>
                         </tbody>
                       </table>
                     </div>
                   ) : (
                     <div className="text-center p-6 text-muted-foreground">尚未新增任何房間</div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* 依據樓層配置計算家具總數 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>依據樓層配置計算家具總數</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {floorMappingData && rooms.length > 0 ? (
-                    <div className="border rounded-lg overflow-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-muted border-b">
-                            <th className="text-left p-3 sticky left-0 bg-muted z-10">家具類型</th>
-                            <th className="text-center p-3">總數量</th>
-                            <th className="text-left p-3 whitespace-nowrap">數量</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.keys(furnitureTotals).map((furnitureType) => {
-                            // 計算每個房間類型的家具數量（不區分大小寫）
-                            const roomTypeMap: Record<
-                              string,
-                              { count: number; furniture: number }
-                            > = {};
-
-                            // 整理樓層資料中的每種房型總數
-                            floorMappingData.forEach((roomType) => {
-                              const lowerCaseRoomName = roomType.name.toLowerCase();
-                              if (!roomTypeMap[lowerCaseRoomName]) {
-                                roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
-                              }
-                              roomTypeMap[lowerCaseRoomName].count += roomType.total;
-                            });
-
-                            // 將每個房間的家具資料對應到房型
-                            rooms.forEach((room) => {
-                              const lowerCaseRoomName = room.name.toLowerCase();
-                              const furnitureCount =
-                                room.furniture?.find((item: any) => item.type === furnitureType)
-                                  ?.count || 0;
-
-                              // 將家具數量分配到對應的房型
-                              Object.keys(roomTypeMap).forEach((roomType) => {
-                                if (lowerCaseRoomName.includes(roomType)) {
-                                  roomTypeMap[roomType].furniture = furnitureCount;
-                                }
-                              });
-                            });
-
-                            // 計算總數
-                            let totalFurniture = 0;
-                            const quantityBreakdown: {
-                              roomType: string;
-                              count: number;
-                              furniture: number;
-                            }[] = [];
-
-                            Object.entries(roomTypeMap).forEach(([roomType, data]) => {
-                              if (data.furniture > 0) {
-                                const roomTypeTotalFurniture = data.count * data.furniture;
-                                totalFurniture += roomTypeTotalFurniture;
-                                quantityBreakdown.push({
-                                  roomType,
-                                  count: data.count,
-                                  furniture: data.furniture,
-                                });
-                              }
-                            });
-
-                            return (
-                              <tr key={furnitureType} className="border-b">
-                                <td className="p-3 font-medium sticky left-0 bg-background z-10">
-                                  {furnitureType}
-                                </td>
-                                <td className="text-center p-3 font-bold">{totalFurniture}</td>
-                                <td className="p-3">
-                                  <div className="flex flex-wrap gap-3">
-                                    {quantityBreakdown.length > 0 ? (
-                                      quantityBreakdown.map((item, idx) => (
-                                        <div key={idx} className="whitespace-nowrap">
-                                          <div className="text-xs text-muted-foreground">
-                                            {item.roomType}
-                                          </div>
-                                          <div className="font-medium">
-                                            {item.count}×{item.furniture}
-                                          </div>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <span className="text-muted-foreground">無數據</span>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center p-6 text-muted-foreground">
-                      {!floorMappingData
-                        ? '尚未上傳樓層配置資料'
-                        : !rooms.length
-                        ? '尚未新增任何房間'
-                        : '無法計算'}
-                    </div>
                   )}
                 </CardContent>
               </Card>
