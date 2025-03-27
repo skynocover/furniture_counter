@@ -141,6 +141,37 @@ export const adminDeleteRoom = async (id: number) => {
   return true;
 };
 
+// Add functions for floor mapping
+export const adminGetFloorMapping = async (projectId: number) => {
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .select('floor_mapping')
+    .eq('id', projectId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching floor mapping:', error);
+    throw error;
+  }
+
+  return data.floor_mapping || [];
+};
+
+export const adminUpdateFloorMapping = async (projectId: number, floorMapping: any) => {
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .update({ floor_mapping: floorMapping })
+    .eq('id', projectId)
+    .select();
+
+  if (error) {
+    console.error('Error updating floor mapping:', error);
+    throw error;
+  }
+
+  return data[0] as Database['public']['Tables']['projects']['Row'];
+};
+
 // 添加家具相關操作
 export const adminUpdateFurniture = async (roomId: number, furniture: any[]) => {
   const { data, error } = await supabaseAdmin
