@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { PlusCircle, Pencil, Check, X, Trash, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-import { Database } from '@/types/supabase';
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,6 +17,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import {
   adminGetProjectById,
@@ -74,6 +79,8 @@ export default function ProjectPage({ params }: any) {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   // Add state for viewing floor mapping image
   const [viewImageDialogOpen, setViewImageDialogOpen] = useState(false);
+  // Add state for selected floor filter
+  const [selectedFloor, setSelectedFloor] = useState<string>('all');
 
   // Add state for tracking which cell is being edited
   const [editingFloorCell, setEditingFloorCell] = useState<{
@@ -500,7 +507,16 @@ export default function ProjectPage({ params }: any) {
           if (!roomTypeMap[lowerCaseRoomName]) {
             roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
           }
-          roomTypeMap[lowerCaseRoomName].count += roomType.total;
+
+          // Filter by selected floor or sum all floors
+          if (selectedFloor === 'all') {
+            roomTypeMap[lowerCaseRoomName].count += roomType.total;
+          } else {
+            const selectedFloorData = roomType.floors.find((floor) => floor.name === selectedFloor);
+            if (selectedFloorData) {
+              roomTypeMap[lowerCaseRoomName].count += selectedFloorData.count;
+            }
+          }
         });
       }
 
@@ -760,6 +776,24 @@ export default function ProjectPage({ params }: any) {
                   <CardTitle className="flex justify-between items-center">
                     <span>依據樓層配置計算家具總數</span>
                     <div className="flex gap-2">
+                      {floorMappingData && floorMappingData.length > 0 && (
+                        <Select
+                          value={selectedFloor}
+                          onValueChange={(value) => setSelectedFloor(value)}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="選擇樓層" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部樓層</SelectItem>
+                            {floorMappingData[0].floors.map((floor, index) => (
+                              <SelectItem key={index} value={floor.name}>
+                                {floor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                       <Button variant="outline" onClick={() => setShowChart(!showChart)}>
                         {showChart ? '顯示表格' : '顯示圖表'}
                       </Button>
@@ -789,7 +823,18 @@ export default function ProjectPage({ params }: any) {
                                 if (!roomTypeMap[lowerCaseRoomName]) {
                                   roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
                                 }
-                                roomTypeMap[lowerCaseRoomName].count += roomType.total;
+
+                                // Filter by selected floor or sum all floors
+                                if (selectedFloor === 'all') {
+                                  roomTypeMap[lowerCaseRoomName].count += roomType.total;
+                                } else {
+                                  const selectedFloorData = roomType.floors.find(
+                                    (floor) => floor.name === selectedFloor,
+                                  );
+                                  if (selectedFloorData) {
+                                    roomTypeMap[lowerCaseRoomName].count += selectedFloorData.count;
+                                  }
+                                }
                               });
                             }
 
@@ -857,7 +902,18 @@ export default function ProjectPage({ params }: any) {
                               if (!roomTypeMap[lowerCaseRoomName]) {
                                 roomTypeMap[lowerCaseRoomName] = { count: 0, furniture: 0 };
                               }
-                              roomTypeMap[lowerCaseRoomName].count += roomType.total;
+
+                              // Filter by selected floor or sum all floors
+                              if (selectedFloor === 'all') {
+                                roomTypeMap[lowerCaseRoomName].count += roomType.total;
+                              } else {
+                                const selectedFloorData = roomType.floors.find(
+                                  (floor) => floor.name === selectedFloor,
+                                );
+                                if (selectedFloorData) {
+                                  roomTypeMap[lowerCaseRoomName].count += selectedFloorData.count;
+                                }
+                              }
                             });
 
                             // 將每個房間的家具資料對應到房型
